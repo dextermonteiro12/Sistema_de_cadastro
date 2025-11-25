@@ -1,10 +1,16 @@
 from faker import Faker
 from flask import Flask, jsonify
+from flask_cors import CORS # 👈 IMPORTAÇÃO NECESSÁRIA
 import random
 
 # Inicializa o Faker para gerar dados em Português do Brasil
 fake = Faker('pt_BR')
 app = Flask(__name__)
+
+# 👈 HABILITA O CORS PARA PERMITIR REQUISIÇÕES DO FRONTEND
+# O parâmetro resources={r"/*": {"origins": "*"}} permite qualquer origem, 
+# o que é ideal para desenvolvimento local.
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 def gerar_cadastro_ficticio():
     """Gera um único registro de cliente fictício."""
