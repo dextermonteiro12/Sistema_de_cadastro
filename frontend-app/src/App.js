@@ -1,55 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import './App.css'; 
+import React, { useState } from 'react';
+import ClientTable from './components/ClientTable'; // Importa o novo componente
+import GeneratorForm from './components/GeneratorForm'; // Importa o formulário
+import './App.css';
 
 function App() {
   const [clientes, setClientes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const URL_API = 'http://127.0.0.1:5000/gerar_dados/10'; // Busca 10 registros
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(null);
 
-  useEffect(() => {
-    // Função para buscar os dados da API Python
+// NOVA FUNÇÃO: Recebe a quantidade do formulário e faz a chamada à API
+  const handleGenerateData = (quantidade) => {
+    const URL_API = `http://127.0.0.1:5000/gerar_dados/${quantidade}`; // URL dinâmica
+  
+
+  setLoading(true);
+    setErro(null); 
+    setClientes([]); // Limpa a tabela enquanto carrega
+
     fetch(URL_API)
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Falha na resposta da rede ou limite excedido.');
+        }
+        return response.json();
+      })
       .then(data => {
         setClientes(data);
-        setLoading(false);
       })
       .catch(error => {
         console.error("Erro ao buscar dados da API:", error);
+        setErro("Erro ao carregar dados. Verifique o console e a API Python.");
+      })
+      .finally(() => {
         setLoading(false);
       });
-  }, []); // O array vazio garante que o 'fetch' rode apenas uma vez (ao carregar o componente)
+  };
 
   return (
     <div className="App">
-      <h1>Gerador de Dados Fictícios (React Frontend)</h1>
-      {loading ? (
-        <p>Carregando dados da API Python...</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nome</th>
-              <th>CPF Fictício</th>
-              <th>Movimentação Sim.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.map((cliente) => (
-              <tr key={cliente.id_cliente}>
-                <td>{cliente.id_cliente.substring(0, 8)}...</td>
-                <td>{cliente.nome}</td>
-                <td>{cliente.cpf}</td>
-                <td>R$ {cliente.movimentacao_simulada.toFixed(2).replace('.', ',')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <h1>Gerador de Dados Fictícios (React)</h1>
+      
+      {/* O componente GeneratorForm chama a função handleGenerateData */}
+      <GeneratorForm onGenerate={handleGenerateData} />
+
+      <hr style={{ margin: '20px 0' }}/>
+      
+      {loading && <p>Carregando dados da API Python...</p>}
+      {erro && <p style={{ color: 'red' }}>Erro: {erro}</p>}
+      
+      {/* O componente ClientTable exibe os dados */}
+      {!loading && !erro && <ClientTable clientes={clientes} />}
     </div>
   );
 }
-
 
 export default App;
