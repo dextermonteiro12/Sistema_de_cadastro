@@ -1,37 +1,7 @@
 import React from 'react';
 
-// Função auxiliar para formatar em JSON
-const formatarJson = (data) => {
-  return JSON.stringify(data, null, 2); // Usa indentação 2 para leitura fácil
-};
-// Função auxiliar para formatar em SQL INSERT (com base na estrutura atual da API)
-const formatarSql = (data, tableName = "clientes_ficticios") => {
-  let sqlScripts = [];
+// --- FUNÇÕES AUXILIARES (Fora do componente para melhor performance) ---
 
-  // Pega apenas as chaves do objeto principal (que contêm os dados do cliente)
-  const columns = Object.keys(data);
-  
-  // Mapeia os valores, garantindo aspas em strings e formato correto para data/UUID
-  const values = Object.values(data).map(value => {
-    if (typeof value === 'string') {
-      // Adiciona aspas em strings, tratando aspas simples dentro da string
-      return `'${value.replace(/'/g, "''")}'`;
-    }
-    if (value === null || value === undefined) {
-      return 'NULL';
-    }
-    return value; // Números e outros tipos
-  });
-
-  const colsStr = columns.join(", ");
-  const valsStr = values.join(", ");
-  
-  sqlScripts.push(`INSERT INTO ${tableName} (${colsStr}) VALUES (${valsStr});`);
-  
-  return sqlScripts.join('\n'); // Retorna uma string com o script SQL
-};
-
-// Função principal para criar e iniciar o download
 const downloadFile = (data, filename, type) => {
   const blob = new Blob([data], { type: type });
   const url = URL.createObjectURL(blob);
@@ -41,71 +11,82 @@ const downloadFile = (data, filename, type) => {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url); // Libera o recurso
+  URL.revokeObjectURL(url);
 };
 
+const formatarSql = (data, tableName = "clientes_ficticios") => {
+  const columns = Object.keys(data).join(", ");
+  const values = Object.values(data).map(value => {
+    if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+    if (value === null || value === undefined) return 'NULL';
+    return value;
+  }).join(", ");
+  return `INSERT INTO ${tableName} (${columns}) VALUES (${values});`;
+};
+
+// --- COMPONENTE PRINCIPAL ---
 
 function ClientTable({ clientes }) {
-  if (clientes.length === 0) {
-    return <p>Nenhum dado gerado. Clique em "Gerar Dados" para começar!</p>;
+  if (!clientes || clientes.length === 0) {
+    return <p style={{ padding: '20px' }}>Nenhum dado gerado. Clique em "Gerar Dados" para começar!</p>;
   }
 
-  // Captura as chaves do primeiro objeto para usar como cabeçalhos da tabela
-  // Isso torna a tabela dinâmica para qualquer campo que o backend esteja enviando.
   const keys = Object.keys(clientes[0]);
 
-  // Função para formatar o nome da coluna (ex: id_cliente -> ID Cliente)
   const formatHeader = (key) => {
-      // Substitui '_' por espaço e capitaliza a primeira letra de cada palavra
-      return key.split('_').map(word => 
-          word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ');
+    return key.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
   };
   
-  // Lógica para download de TODOS os clientes em JSON (usando o formato da API)
   const handleDownloadAllJson = () => {
     const jsonContent = JSON.stringify(clientes, null, 2);
-    downloadFile(jsonContent, 'clientes_ficticios.json', 'application/json');
+    downloadFile(jsonContent, 'clientes_pld.json', 'application/json');
   };
 
-  // Para fins de teste, criamos uma função SQL simples aqui
-  const formatarSql = (data, tableName = "clientes_ficticios") => {
-      const columns = Object.keys(data).join(", ");
-      // Mapeamento simples de valores para SQL (necessário tratar strings e datas com aspas)
-      const values = Object.values(data).map(value => {
-          if (typeof value === 'string' || value instanceof Date) return `'${value}'`;
-          return value;
-      }).join(", ");
-      return `INSERT INTO ${tableName} (${columns}) VALUES (${values});`;
-  };
-  
-  // Lógica para download de TODOS os clientes em SQL
   const handleDownloadAllSql = () => {
-      const allSql = clientes.map(cliente => formatarSql(cliente)).join('\n');
-      downloadFile(allSql, 'clientes_ficticios.sql', 'text/plain');
+    const allSql = clientes.map(cliente => formatarSql(cliente)).join('\n');
+    downloadFile(allSql, 'clientes_pld.sql', 'text/plain');
   };
 
   return (
-    <div>
-        <h3>Dados Gerados ({clientes.length} Registros)</h3>
-        
-        <div style={{ margin: '10px 0', paddingBottom: '10px' }}>
-            <h4>Opções de Download</h4>
-            <button onClick={handleDownloadAllJson} style={{ marginRight: '10px' }}>
-                Baixar Todos como JSON
-            </button>
-            <button onClick={handleDownloadAllSql}>
-                Baixar Todos como SQL
-            </button>
+    <div style={{ marginTop: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3>Dados Gerados ({clientes.length} Registros)</h3>
+            <div>
+                <button onClick={handleDownloadAllJson} style={{ marginRight: '10px', cursor: 'pointer' }}>
+                    📦 Baixar JSON
+                </button>
+                <button onClick={handleDownloadAllSql} style={{ cursor: 'pointer' }}>
+                    💾 Baixar SQL
+                </button>
+            </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}> {/* Adiciona barra de rolagem horizontal se necessário */}
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        {/* CONTAINER COM SCROLL HORIZONTAL */}
+        <div style={{ 
+            width: '100%', 
+            overflowX: 'auto', 
+            border: '1px solid #ddd', 
+            borderRadius: '8px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+        }}> 
+            <table style={{ 
+                width: '100%', 
+                borderCollapse: 'collapse', 
+                minWidth: '4000px', // Força a largura para acomodar os 48 campos
+                backgroundColor: '#fff'
+            }}>
                 <thead>
-                    <tr>
-                        {/* Cria os cabeçalhos da tabela dinamicamente */}
+                    <tr style={{ backgroundColor: '#20232a' }}>
                         {keys.map(key => (
-                            <th key={key} style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>
+                            <th key={key} style={{ 
+                                border: '1px solid #444', 
+                                padding: '12px 8px', 
+                                textAlign: 'left',
+                                color: '#61dafb',
+                                whiteSpace: 'nowrap'
+                            }}>
                                 {formatHeader(key)}
                             </th>
                         ))}
@@ -113,12 +94,16 @@ function ClientTable({ clientes }) {
                 </thead>
                 <tbody>
                     {clientes.map((cliente, index) => (
-                        <tr key={index}>
-                            {/* Preenche as células com os valores correspondentes */}
+                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff' }}>
                             {keys.map(key => (
-                                <td key={key} style={{ border: '1px solid #ddd', padding: '8px' }}>
-                                    {/* Formatação simples para números grandes (UUIDs) */}
-                                    {key === 'id_cliente' && typeof cliente[key] === 'string' ? `${cliente[key].substring(0, 8)}...` : cliente[key]}
+                                <td key={key} style={{ 
+                                    border: '1px solid #ddd', 
+                                    padding: '10px 8px',
+                                    fontSize: '13px',
+                                    whiteSpace: 'nowrap' 
+                                }}>
+                                    {/* Lógica para exibição de valores (trata null e booleano) */}
+                                    {cliente[key] === null ? 'NULL' : cliente[key].toString()}
                                 </td>
                             ))}
                         </tr>
@@ -126,10 +111,11 @@ function ClientTable({ clientes }) {
                 </tbody>
             </table>
         </div>
+        <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+            * Role para a direita para visualizar todos os campos PLD.
+        </p>
     </div>
   );
 }
 
-// ... (resto do código da função ClientTable)
-
-export default ClientTable; // <-- DEVE TER 'export default'
+export default ClientTable;
