@@ -11,13 +11,13 @@ function GeneratorForm({ onGenerate }) {
   return (
     <form onSubmit={handleSubmit}>
       <label htmlFor="quantidade">
-        Quantos registros gerar (máx. 100):
+        Quantos registros gerar (máx. 10000000):
       </label>
       <input
         id="quantidade"
         type="number"
         min="1"
-        max="100"
+        max="10000000"
         value={quantidade}
         onChange={(e) => setQuantidade(e.target.value)} // Atualiza o estado
         style={{ margin: '0 10px', padding: '5px', width: '80px' }}
