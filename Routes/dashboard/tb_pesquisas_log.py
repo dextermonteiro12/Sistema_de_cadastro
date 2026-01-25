@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-import pypyodbc as pyodbc
+import pyodbc
 from config import Config
 
 log_pesquisas_bp = Blueprint('log_pesquisas', __name__)

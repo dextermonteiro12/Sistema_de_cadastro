@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-import pypyodbc as pyodbc
+import pyodbc
 from config import Config
 
 fila_adsvc_bp = Blueprint('fila_adsvc', __name__)

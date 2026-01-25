@@ -1,11 +1,12 @@
 from flask import Blueprint, request, jsonify
-import pypyodbc as pyodbc
+import pyodbc
 from config import Config
 from datetime import datetime
 
 perf_workers_bp = Blueprint('perf_workers', __name__)
 
 def get_db_connection(config):
+    # Timeout reduzido para não travar o dashboard se o banco estiver sob carga extrema
     return pyodbc.connect(Config.get_connection_string(config), timeout=5)
 
 @perf_workers_bp.route("/api/dashboard/performance-workers", methods=["POST"])
@@ -21,71 +22,75 @@ def get_performance_data():
         conn = get_db_connection(config)
         cursor = conn.cursor()
         
-        # Lista de tabelas de Workers conforme sua solicitação
-        # Note que para MF5 e LV5 usei a lógica do seu exemplo (consultando MF4 e LV4 respectivamente)
+        # Mapeamento dos workers conforme sua estrutura
+        # Mantive a lógica onde MF5 e LV5 consultam a base da MF4/LV4
         workers_map = [
-            ('ADSVC_EXECUTANDO', 'ADSVC_EXECUTANDO'),
-            ('ADSVC_EXECUTANDO_MF1', 'ADSVC_EXECUTANDO_MF1'),
-            ('ADSVC_EXECUTANDO_MF2', 'ADSVC_EXECUTANDO_MF2'),
-            ('ADSVC_EXECUTANDO_MF3', 'ADSVC_EXECUTANDO_MF3'),
-            ('ADSVC_EXECUTANDO_MF4', 'ADSVC_EXECUTANDO_MF4'),
-            ('ADSVC_EXECUTANDO_MF5', 'ADSVC_EXECUTANDO_MF4'), # Conforme seu exemplo
-            ('ADSVC_EXECUTANDO_LV1', 'ADSVC_EXECUTANDO_LV1'),
-            ('ADSVC_EXECUTANDO_LV2', 'ADSVC_EXECUTANDO_LV2'),
-            ('ADSVC_EXECUTANDO_LV3', 'ADSVC_EXECUTANDO_LV3'),
-            ('ADSVC_EXECUTANDO_LV4', 'ADSVC_EXECUTANDO_LV4'),
-            ('ADSVC_EXECUTANDO_LV5', 'ADSVC_EXECUTANDO_LV4')  # Conforme seu exemplo
+            ('PRINCIPAL', 'ADSVC_EXECUTANDO'),
+            ('MF1', 'ADSVC_EXECUTANDO_MF1'),
+            ('MF2', 'ADSVC_EXECUTANDO_MF2'),
+            ('MF3', 'ADSVC_EXECUTANDO_MF3'),
+            ('MF4', 'ADSVC_EXECUTANDO_MF4'),
+            ('MF5', 'ADSVC_EXECUTANDO_MF4'), 
+            ('LV1', 'ADSVC_EXECUTANDO_LV1'),
+            ('LV2', 'ADSVC_EXECUTANDO_LV2'),
+            ('LV3', 'ADSVC_EXECUTANDO_LV3'),
+            ('LV4', 'ADSVC_EXECUTANDO_LV4'),
+            ('LV5', 'ADSVC_EXECUTANDO_LV4')
         ]
         
         performance_total = []
 
         for label, table_name in workers_map:
-            # Query construída para seguir exatamente sua estrutura de INNER JOIN
-            # DS_COMANDO1 vem da tabela A (Worker)
-            # QT_TEMPO_EXEC vem da tabela B (Excluir)
+            # SQL otimizado com verificações de existência e NOLOCK
+            # Retornamos o TOP 50 de cada worker para não sobrecarregar o JSON
             sql = f"""
             SET NOCOUNT ON;
             IF OBJECT_ID('{table_name}', 'U') IS NOT NULL AND OBJECT_ID('ADSVC_EXECUTADOS_EXCLUIR', 'U') IS NOT NULL
             BEGIN
-                DECLARE @Sql NVARCHAR(MAX) = '
-                SELECT TOP 100 
-                    GETDATE() as dt, 
-                    ''EXECUTADOS {label}'' as worker, 
-                    LEFT(A.DS_COMANDO1, 15) as comando, 
+                SELECT TOP 50
+                    B.DTHR_EXCLUSAO as dt, 
+                    '{label}' as worker, 
+                    LEFT(A.DS_COMANDO1, 30) as comando, 
                     B.QT_TEMPO_EXEC as tempo
                 FROM {table_name} A WITH (NOLOCK)
                 INNER JOIN ADSVC_EXECUTADOS_EXCLUIR B WITH (NOLOCK) ON A.ID_SVC_EXECUTAR = B.ID_SVC_EXECUTAR
-                ORDER BY B.QT_TEMPO_EXEC DESC';
-                
-                EXEC sp_executesql @Sql;
+                ORDER BY B.DTHR_EXCLUSAO DESC;
             END
             """
             try:
                 cursor.execute(sql)
-                if cursor.description:
-                    rows = cursor.fetchall()
+                
+                # Coleta os resultados desta tabela
+                rows = cursor.fetchall()
+                if rows:
                     for row in rows:
                         performance_total.append({
-                            "data_exec": row[0].strftime('%d/%m/%Y %H:%M:%S') if row[0] else "",
+                            "data_exec": row[0].strftime('%d/%m %H:%M:%S') if row[0] else "",
                             "worker": row[1],
-                            "exec": row[2],
+                            "exec": row[2].strip() if row[2] else "---",
                             "qtd_tempo": int(row[3]) if row[3] else 0
                         })
                 
-                # Limpa o cursor para a próxima iteração do loop
+                # Importante: consome sets vazios para liberar o cursor para a próxima tabela
                 while cursor.nextset():
                     pass
+
             except Exception as e:
-                print(f"Erro ao processar {label}: {str(e)}")
+                # Log de erro interno (opcional) sem interromper o loop global
+                print(f"Aviso: Tabela {table_name} ignorada ou erro na consulta: {str(e)}")
                 continue
 
-        # Ordenação global pelo tempo mais lento no topo
+        # Ordenação Global: Os mais lentos (latência alta) ficam no topo
         performance_total = sorted(performance_total, key=lambda x: x['qtd_tempo'], reverse=True)
 
-        return jsonify({"status": "ok", "dados": performance_total}), 200
+        # Retornamos os dados no formato que o React espera: { status: "ok", dados: [...] }
+        return jsonify({
+            "status": "ok", 
+            "dados": performance_total[:100] # Limitamos aos top 100 totais para performance do Front
+        }), 200
 
     except Exception as e:
-        print(f"ERRO CRÍTICO NO BACKEND: {str(e)}")
         return jsonify({"status": "erro", "erro": str(e)}), 500
     finally:
-        if conn: conn.close()
+        if conn: 
+            conn.close()
