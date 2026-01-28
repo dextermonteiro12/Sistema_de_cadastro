@@ -8,6 +8,7 @@ import Movimentacoes from './screens/Movimentacoes';
 import Monitoramento from './screens/Monitoramento';
 import Normalizacao from './screens/Normalizacao';
 import Configuracao from './screens/Configuracao';
+import CargaCoTit from './screens/Cargacotit';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.0.119:5000';
@@ -83,20 +84,22 @@ function App() {
         <nav style={navStyle}>
           <Link to="/" style={linkNav}>🏠 Início</Link>
           <Link to="/clientes" style={linkNav}>👥 Clientes</Link>
+          <Link to="/Cargacotit" style={linkNav}>⚙️ Dependentes</Link>
           <Link to="/movimentacoes" style={linkNav}>💰 Movimentações</Link>
           <Link to="/normalizacao" style={linkNav}>🛡️ Normalização</Link>
           <Link to="/monitoramento" style={linkNav}>📊 Monitoramento</Link>
-          <Link to="/configuracao" style={linkNav}>⚙️ Ambiente</Link>
+          <Link to="/configuracao" style={linkNav}>⚙️ Ambiente</Link>          
           <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={btnLogout}>Sair</button>
         </nav>
 
         <Routes>
           <Route path="/" element={<Home userTipo={userTipo} />} />
           <Route path="/clientes" element={<Clientes />} />
+          <Route path="/CargaCoTit" element={<CargaCoTit />} />
           <Route path="/movimentacoes" element={<Movimentacoes />} />
           <Route path="/monitoramento" element={<Monitoramento />} />
           <Route path="/normalizacao" element={<Normalizacao />} />
-          <Route path="/configuracao" element={<Configuracao />} />
+          <Route path="/configuracao" element={<Configuracao />} />          
         </Routes>
       </div>
     </Router>

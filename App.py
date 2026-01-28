@@ -16,6 +16,7 @@ from Routes.ambiente import ambiente_bp
 from Routes.monitoramento import monitoramento_bp
 from Routes.auth import auth_bp
 from Routes.home import home_bp
+from Routes.cargacotit import cargacotit_bp
 
 # Módulos de Dashboard e Monitoramento Detalhado
 from Routes.dashboard.tb_fila_adsvc import fila_adsvc_bp
@@ -37,6 +38,7 @@ app.register_blueprint(movimentacoes_bp)
 app.register_blueprint(ambiente_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(home_bp)
+app.register_blueprint(cargacotit_bp)
 
 # Rotas de monitoramento e análise de dados
 app.register_blueprint(monitoramento_bp) # Rota geral (/status_dashboard)
