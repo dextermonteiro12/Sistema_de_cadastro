@@ -17,7 +17,7 @@ export default function Movimentacoes() {
 
   // AJUSTE: Agora recebe 'qtd' que vem do GeneratorForm
   const handleGerarCarga = async (qtd) => {
-    const configRaw = localStorage.getItem('pld_sql_config');
+    const configRaw = sessionStorage.getItem('pld_sql_config');
     if (!configRaw) return alert("⚠️ Configure o Ambiente SQL primeiro!");
     
     const configSql = JSON.parse(configRaw);

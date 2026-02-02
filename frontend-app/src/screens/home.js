@@ -21,7 +21,7 @@ const Home = () => {
     const [erro, setErro] = useState(null);
 
     const fetchSaude = async () => {
-        const configSql = localStorage.getItem('pld_sql_config');
+        const configSql = sessionStorage.getItem('pld_sql_config');
         if (!configSql) {
             setErro("Configuração de banco de dados não encontrada.");
             setLoading(false);

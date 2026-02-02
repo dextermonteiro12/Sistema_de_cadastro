@@ -17,7 +17,7 @@ def gerar_doc_aleatorio(tamanho):
 @clientes_bp.route("/gerar_clientes", methods=["POST"])
 def gerar_clientes():
     dados = request.json
-    config = dados.get('config')
+    config = dados.get('config', {})
     versao_sistema = config.get('versao', 'V8')
     
     total_solicitado = int(dados.get('quantidade', 1))

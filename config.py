@@ -23,7 +23,7 @@ class Config:
             f"DATABASE={db_config['banco']};"
             f"UID={db_config['usuario']};"
             f"PWD={db_config['senha']};"
-            f"ConnectTimeout=10;"
+            f"ConnectTimeout=300;"
             f"TrustServerCertificate=yes;"
         )
 

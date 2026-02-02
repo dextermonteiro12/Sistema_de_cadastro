@@ -32,7 +32,7 @@ export default function Clientes() {
 
   const handleGerar = async () => {
     setCarregando(true);
-    const configSql = JSON.parse(localStorage.getItem('pld_sql_config'));
+    const configSql = JSON.parse(sessionStorage.getItem('pld_sql_config'));
 
     try {
       const res = await fetch(`${API_BASE_URL}/gerar_clientes`, {

@@ -9,7 +9,7 @@ export default function TbPerformanceWorkers() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    const configSql = localStorage.getItem('pld_sql_config');
+    const configSql = sessionStorage.getItem('pld_sql_config');
     if (!configSql) return;
     
     try {
