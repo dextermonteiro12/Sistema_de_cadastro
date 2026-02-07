@@ -1,2 +1,26 @@
-venv
-node_modules
+# Ambientes Virtuais (Python)
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+
+# Node.js (Frontend)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Banco de Dados e Logs
+*.db
+*.log
+
+# Arquivos de Sistema e Chaves (Segurança!)
+chave
+chave.pub
+.DS_Store
+Thumbs.db
+
+# Configurações de IDE
+.vscode/
+.idea/
