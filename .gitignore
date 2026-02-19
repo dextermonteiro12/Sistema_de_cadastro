@@ -1,26 +1,73 @@
 # Ambientes Virtuais (Python)
 .venv/
 venv/
+venv*/
 ENV/
+env/
+.env
+.env.local
+*.egg-info/
+dist/
+build/
+
+# Bytecode Python
 __pycache__/
 *.py[cod]
+*.pyc
+*.pyo
+*.egg
+.pytest_cache/
+.coverage
 
 # Node.js (Frontend)
 node_modules/
 npm-debug.log*
 yarn-error.log*
 .eslintcache
+dist/
+build/
 
 # Banco de Dados e Logs
 *.db
 *.log
+logs/
+*.sqlite
+*.sqlite3
+
+# Diretórios Temporários
+temp/
+tmp/
+tmp_install/
+.tmp/
 
 # Arquivos de Sistema e Chaves (Segurança!)
 chave
 chave.pub
 .DS_Store
 Thumbs.db
+*.pem
+*.key
+*.crt
 
-# Configurações de IDE
+# Configurações de IDE e Editores
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.example
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Arquivos de Backup
+*.backup
+*.bak
+*.old
+.git/
+
+# IDE específicas
+.vscode/settings.json
+.vscode/launch.json
