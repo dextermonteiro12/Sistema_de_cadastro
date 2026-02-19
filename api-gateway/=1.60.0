@@ -1,0 +1,12 @@
+Collecting grpcio
+  Using cached grpcio-1.78.0-cp314-cp314-win_amd64.whl.metadata (3.9 kB)
+Collecting grpcio-tools
+  Using cached grpcio_tools-1.78.0-cp314-cp314-win_amd64.whl.metadata (5.5 kB)
+Requirement already satisfied: typing-extensions~=4.12 in C:\Users\fmonteiro\Documents\sistema_cadastro\venv\Lib\site-packages (from grpcio) (4.15.0)
+Requirement already satisfied: protobuf<7.0.0,>=6.31.1 in C:\Users\fmonteiro\Documents\sistema_cadastro\venv\Lib\site-packages (from grpcio-tools) (6.33.5)
+Requirement already satisfied: setuptools>=77.0.1 in C:\Users\fmonteiro\Documents\sistema_cadastro\venv\Lib\site-packages (from grpcio-tools) (82.0.0)
+Using cached grpcio-1.78.0-cp314-cp314-win_amd64.whl (4.9 MB)
+Using cached grpcio_tools-1.78.0-cp314-cp314-win_amd64.whl (1.2 MB)
+Installing collected packages: grpcio, grpcio-tools
+
+Successfully installed grpcio-1.78.0 grpcio-tools-1.78.0

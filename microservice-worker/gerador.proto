@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package gerador;
+
+service DataGenerator {
+  rpc GenerateClientes (GenerateClientesRequest) returns (GenerateClientesResponse);
+  rpc GetJobStatus (JobStatusRequest) returns (JobStatusResponse);
+}
+
+message GenerateClientesRequest {
+  string config_key = 1;
+  int32 quantidade = 2;
+  int32 qtd_pf = 3;
+  int32 qtd_pj = 4;
+
+  string servidor = 10;
+  string banco = 11;
+  string usuario = 12;
+  string senha = 13;
+  string driver = 14;
+}
+
+message GenerateClientesResponse {
+  string status = 1;
+  string job_id = 2;
+  string message = 3;
+  int32 inserted = 4;
+}
+
+message JobStatusRequest {
+  string job_id = 1;
+}
+
+message JobStatusResponse {
+  string status = 1;
+  int32 percent = 2;
+  int32 inserted = 3;
+  string message = 4;
+}

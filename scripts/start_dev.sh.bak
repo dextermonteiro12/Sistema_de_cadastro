@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/_common.sh"
+
+start_api() {
+  if is_running "$API_PID_FILE"; then msg "API já rodando"; return; fi
+  cd "$API_DIR"
+  activate_venv
+  nohup python main.py > "$API_LOG" 2>&1 &
+  echo $! > "$API_PID_FILE"
+  deactivate || true
+  msg "API iniciada (PID $(cat "$API_PID_FILE"))"
+}
+
+start_worker() {
+  if is_running "$WORKER_PID_FILE"; then msg "Worker já rodando"; return; fi
+  cd "$WORKER_DIR"
+  activate_venv
+  nohup python server.py > "$WORKER_LOG" 2>&1 &
+  echo $! > "$WORKER_PID_FILE"
+  deactivate || true
+  msg "Worker iniciado (PID $(cat "$WORKER_PID_FILE"))"
+}
+
+start_frontend() {
+  [[ "$START_FRONTEND" == "1" ]] || { msg "Frontend desabilitado"; return; }
+  if is_running "$FRONTEND_PID_FILE"; then msg "Frontend já rodando"; return; fi
+  cd "$FRONTEND_DIR"
+  nohup npm start > "$FRONTEND_LOG" 2>&1 &
+  echo $! > "$FRONTEND_PID_FILE"
+  msg "Frontend iniciado (PID $(cat "$FRONTEND_PID_FILE"))"
+}
+
+start_api
+start_worker
+start_frontend
+
+msg "Aguardando API..."
+for i in {1..40}; do
+  if curl -fsS "$API_URL/health" >/dev/null 2>&1; then
+    msg "API OK"; exit 0
+  fi
+  sleep 1
+done
+echo "API não respondeu /health" >&2
+exit 1

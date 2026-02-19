@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+API_DIR="$ROOT_DIR/api-gateway"
+WORKER_DIR="$ROOT_DIR/microservice-worker"
+FRONTEND_DIR="$ROOT_DIR/frontend-app"
+
+RUN_DIR="$ROOT_DIR/.run"
+LOG_DIR="$RUN_DIR/logs"
+PID_DIR="$RUN_DIR/pids"
+
+API_PID_FILE="$PID_DIR/api.pid"
+WORKER_PID_FILE="$PID_DIR/worker.pid"
+FRONTEND_PID_FILE="$PID_DIR/frontend.pid"
+
+API_LOG="$LOG_DIR/api.log"
+WORKER_LOG="$LOG_DIR/worker.log"
+FRONTEND_LOG="$LOG_DIR/frontend.log"
+
+API_URL="${API_URL:-http://localhost:5000}"
+START_FRONTEND="${START_FRONTEND:-1}" # 1 sobe frontend também
+
+mkdir -p "$LOG_DIR" "$PID_DIR"
+
+msg() { echo "[$(date +'%H:%M:%S')] $*"; }
+
+pick_python() {
+  if command -v python3 >/dev/null 2>&1; then echo "python3"; return; fi
+  if command -v python >/dev/null 2>&1; then echo "python"; return; fi
+  echo "Python não encontrado." >&2; exit 1
+}
+
+is_running() {
+  local f="$1"
+  [[ -f "$f" ]] || return 1
+  local pid; pid="$(cat "$f" 2>/dev/null || true)"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+ensure_grpc_req() {
+  local req="$API_DIR/requirements.txt"
+  [[ -f "$req" ]] || return 0
+  sed -i -E 's/^grpcio>=.*/grpcio>=1.78.0/' "$req"
+  sed -i -E 's/^grpcio-tools>=.*/grpcio-tools>=1.78.0/' "$req"
+}
+
+activate_venv() {
+  if [[ -f ".venv/bin/activate" ]]; then
+    source .venv/bin/activate
+  elif [[ -f ".venv/Scripts/activate" ]]; then
+    source .venv/Scripts/activate
+  else
+    echo "Arquivo de ativação não encontrado em .venv (bin/ ou Scripts/)." >&2
+    return 1
+  fi
+}

@@ -1,0 +1,43 @@
+"""
+API Gateway FastAPI - versão de teste (ASCII)
+"""
+
+from fastapi import FastAPI
+from fastapi.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from datetime import datetime
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="PLD Data Generator API", version="2.0.0")
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["*"],
+  allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+
+@app.get("/")
+async def root():
+    return {"message": "PLD Data Generator API v2.0"}
+
+@app.get("/health")
+async def health():
+    return {"status": "online", "version": "2.0.0", "timestamp": datetime.now().isoformat()}
+
+@app.post("/login")
+async def login(body: dict):
+    username = body.get("username")
+    password = body.get("password")
+    if username == "admin" and password == "1234":
+        return {"status": "ok", "user": "admin", "tipo": "ADMIN"}
+    return JSONResponse(content={"message":"Erro"}, status_code=401)
+
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("Starting API Gateway")
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)

@@ -1,104 +1,308 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useConfig } from '../context/ConfigContext';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 export default function Configuracao() {
-  const [config, setConfig] = useState({ servidor: '', banco: '', usuario: '', senha: '', versao: '' });
-  const [loading, setLoading] = useState(false);
+  const { configKey, config, status, carregando, erro, validarConfig, testarConexao, desconectar } = useConfig();
 
-  // Carrega as configurações APENAS desta aba (sessão)
-  useEffect(() => {
-    const savedConfig = sessionStorage.getItem('pld_sql_config');
-    if (savedConfig) setConfig(JSON.parse(savedConfig));
-  }, []);
+  const [formData, setFormData] = useState({
+    servidor: config?.servidor || '',
+    banco: config?.banco || '',
+    usuario: config?.usuario || '',
+    senha: config?.senha || ''
+  });
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    // Salva no sessionStorage para isolar de outras abas
-    sessionStorage.setItem('pld_sql_config', JSON.stringify(config));
-    alert("✅ Configurações salvas para esta aba!");
-    
-    // Opcional: remover o reload se quiser manter o estado do React vivo
-    // window.location.reload(); 
+  const [testando, setTestando] = useState(false);
+  const [statusTeste, setStatusTeste] = useState(null);
+
+  // Handle form change
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleTestarConexao = async () => {
-    setLoading(true);
+  // Validar configuração
+  const handleValidar = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.servidor || !formData.banco || !formData.usuario || !formData.senha) {
+      alert('⚠️ Preencha todos os campos');
+      return;
+    }
+
+    const resultado = await validarConfig(formData);
+    
+    if (resultado.sucesso) {
+      alert(`✅ Configuração ativada com sucesso!\nVersão: ${resultado.detalhes.versao_sistema}`);
+    } else {
+      alert(`❌ Erro: ${resultado.erro}`);
+    }
+  };
+
+  // Apenas testar conexão
+  const handleTestar = async () => {
+    if (!formData.servidor || !formData.banco || !formData.usuario || !formData.senha) {
+      alert('⚠️ Preencha todos os campos');
+      return;
+    }
+
+    setTestando(true);
+    setStatusTeste(null);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/check_ambiente`, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config })
-      });
-      
-      const data = await res.json();
-      
-      if (data.status === "ok") {
-        const configComVersao = { ...config, versao: data.versao };
-        setConfig(configComVersao);
-        
-        // Salva a detecção automática na sessão atual
-        sessionStorage.setItem('pld_sql_config', JSON.stringify(configComVersao));
-        
-        alert(`✅ Conexão SQL OK!\nAmbiente Detectado: ${data.versao}`);
-      } else {
-        alert("❌ Erro: " + data.erro);
-      }
-    } catch (err) { 
-      alert("❌ Erro de rede ou servidor ocupado (Timeout)."); 
+      const resultado = await testarConexao(formData);
+      setStatusTeste(resultado);
     } finally {
-      setLoading(false);
+      setTestando(false);
+    }
+  };
+
+  // Desconectar
+  const handleDesconectar = async () => {
+    if (window.confirm('Tem certeza que deseja desconectar?')) {
+      await desconectar();
+      setFormData({ servidor: '', banco: '', usuario: '', senha: '' });
+      alert('✓ Desconectado');
     }
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #ddd' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <h3 style={{ margin: 0 }}>⚙️ Ambiente SQL Server (Sessão Isolada)</h3>
-        
-        {config.versao && (
-          <span style={{
-            padding: '5px 12px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            backgroundColor: config.versao === 'V9' ? '#10b981' : '#3b82f6',
-            color: 'white'
-          }}>
-            LAYOUT: {config.versao}
-          </span>
-        )}
+    <div style={containerStyle}>
+      <h2>⚙️ Configuração de Banco de Dados</h2>
+
+      {/* Status Card */}
+      <div style={statusCardStyle(status)}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <strong style={{ fontSize: '14px' }}>Status da Conexão</strong>
+            <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#666' }}>
+              {status === 'conectado' && (
+                <>
+                  ✅ Conectado como: <code>{config?.usuario}@{config?.servidor}</code>
+                  <br/>
+                  Config Key: <code style={{ fontSize: '10px' }}>{configKey}</code>
+                </>
+              )}
+              {status === 'desconectado' && '❌ Desconectado - Nenhuma configuração ativa'}
+              {status === 'erro' && `⚠️ Erro: ${erro}`}
+            </p>
+          </div>
+          {status === 'conectado' && (
+            <button onClick={handleDesconectar} style={btnDangerStyle}>
+              🔌 Desconectar
+            </button>
+          )}
+        </div>
       </div>
 
-      <form onSubmit={handleSave} style={{ display: 'grid', gap: '15px', maxWidth: '450px' }}>
-        <input type="text" placeholder="Servidor (ex: localhost\SQLEXPRESS)" value={config.servidor} onChange={e => setConfig({...config, servidor: e.target.value})} style={inputStyle} />
-        <input type="text" placeholder="Nome do Banco de Dados" value={config.banco} onChange={e => setConfig({...config, banco: e.target.value})} style={inputStyle} />
-        <input type="text" placeholder="Usuário SQL (sa)" value={config.usuario} onChange={e => setConfig({...config, usuario: e.target.value})} style={inputStyle} />
-        <input type="password" placeholder="Senha" value={config.senha} onChange={e => setConfig({...config, senha: e.target.value})} style={inputStyle} />
-        
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="submit" style={{ ...btnStyle, backgroundColor: '#007bff' }}>
-            💾 Salvar nesta Aba
-          </button>
-          <button 
-            type="button" 
-            onClick={handleTestarConexao} 
-            disabled={loading}
-            style={{ ...btnStyle, backgroundColor: '#6c757d', opacity: loading ? 0.7 : 1 }}
+      {/* Form */}
+      <form onSubmit={handleValidar} style={formStyle}>
+        <div style={fieldGroupStyle}>
+          <label>Servidor SQL Server</label>
+          <input
+            type="text"
+            name="servidor"
+            placeholder="ex: localhost ou 192.168.1.10"
+            value={formData.servidor}
+            onChange={handleChange}
+            disabled={carregando || testando}
+            style={inputStyle}
+          />
+          <small style={helpTextStyle}>IP ou nome do servidor SQL Server</small>
+        </div>
+
+        <div style={fieldGroupStyle}>
+          <label>Banco de Dados</label>
+          <input
+            type="text"
+            name="banco"
+            placeholder="ex: PLD"
+            value={formData.banco}
+            onChange={handleChange}
+            disabled={carregando || testando}
+            style={inputStyle}
+          />
+          <small style={helpTextStyle}>Nome do banco de dados PLD</small>
+        </div>
+
+        <div style={fieldGroupStyle}>
+          <label>Usuário SQL</label>
+          <input
+            type="text"
+            name="usuario"
+            placeholder="ex: sa"
+            value={formData.usuario}
+            onChange={handleChange}
+            disabled={carregando || testando}
+            style={inputStyle}
+          />
+          <small style={helpTextStyle}>Usuário de autenticação SQL</small>
+        </div>
+
+        <div style={fieldGroupStyle}>
+          <label>Senha</label>
+          <input
+            type="password"
+            name="senha"
+            placeholder="Sua senha"
+            value={formData.senha}
+            onChange={handleChange}
+            disabled={carregando || testando}
+            style={inputStyle}
+          />
+          <small style={helpTextStyle}>Senha do usuário SQL</small>
+        </div>
+
+        <div style={buttonGroupStyle}>
+          <button
+            type="button"
+            onClick={handleTestar}
+            disabled={carregando || testando}
+            style={btnSecondaryStyle}
           >
-            {loading ? "⌛ Detectando..." : "🔍 Testar Conexão"}
+            {testando ? '⌛ Testando...' : '🔍 Testar Conexão'}
+          </button>
+          <button
+            type="submit"
+            disabled={carregando || testando}
+            style={btnPrimaryStyle}
+          >
+            {carregando ? '⌛ Validando...' : '✅ Validar e Ativar'}
           </button>
         </div>
       </form>
-      
-      <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px' }}>
-        <p style={{ fontSize: '12px', color: '#856404', margin: 0 }}>
-          <strong>Dica de Isolamento:</strong> Usamos <code>sessionStorage</code>. Você pode configurar a V8 aqui e abrir uma <b>Nova Aba</b> para configurar a V9. Uma carga iniciada em uma aba não impedirá a navegação na outra.
-        </p>
+
+      {/* Resultado do teste */}
+      {statusTeste && (
+        <div style={resultadoStyle(statusTeste.status)}>
+          <strong>{statusTeste.status === 'ok' ? '✅ Sucesso' : '❌ Erro'}</strong>
+          <p>{statusTeste.mensagem}</p>
+          {statusTeste.detalhes && (
+            <pre style={{ fontSize: '11px', color: '#666', margin: '10px 0 0 0' }}>
+              {JSON.stringify(statusTeste.detalhes, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Info Box */}
+      <div style={infoBoxStyle}>
+        <strong>ℹ️ Como funciona:</strong>
+        <ul style={{ margin: '10px 0 0 0', fontSize: '12px', paddingLeft: '20px' }}>
+          <li>Configure suas credenciais SQL Server</li>
+          <li>Clique "Testar Conexão" para validar (opcional)</li>
+          <li>Clique "Validar e Ativar" para conectar ao banco</li>
+          <li>Uma vez conectado, todas as operações usarão essa conexão</li>
+          <li>Você pode desconectar e conectar a outro servidor quando quiser</li>
+        </ul>
       </div>
     </div>
   );
 }
 
-const inputStyle = { padding: '10px', border: '1px solid #ddd', borderRadius: '4px', width: '100%' };
-const btnStyle = { padding: '10px 20px', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', color: 'white' };
+// ===== ESTILOS =====
+const containerStyle = {
+  padding: '30px',
+  backgroundColor: '#f8f9fa',
+  minHeight: '100vh'
+};
+
+const statusCardStyle = (status) => ({
+  padding: '20px',
+  marginBottom: '30px',
+  borderRadius: '8px',
+  border: '2px solid',
+  borderColor: status === 'conectado' ? '#10b981' : status === 'erro' ? '#ef4444' : '#d1d5db',
+  backgroundColor: status === 'conectado' ? '#ecfdf5' : status === 'erro' ? '#fef2f2' : '#f9fafb'
+});
+
+const formStyle = {
+  backgroundColor: 'white',
+  padding: '20px',
+  borderRadius: '8px',
+  marginBottom: '20px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+};
+
+const fieldGroupStyle = {
+  marginBottom: '15px'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px',
+  border: '1px solid #d1d5db',
+  borderRadius: '4px',
+  fontSize: '14px',
+  marginTop: '5px',
+  boxSizing: 'border-box'
+};
+
+const helpTextStyle = {
+  display: 'block',
+  marginTop: '4px',
+  color: '#6b7280',
+  fontSize: '11px'
+};
+
+const buttonGroupStyle = {
+  display: 'flex',
+  gap: '10px',
+  marginTop: '20px'
+};
+
+const btnPrimaryStyle = {
+  flex: 1,
+  padding: '10px',
+  backgroundColor: '#007bff',
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  cursor: 'pointer',
+  transition: 'background-color 0.2s'
+};
+
+const btnSecondaryStyle = {
+  flex: 1,
+  padding: '10px',
+  backgroundColor: '#6c757d',
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '14px',
+  fontWeight: 'bold',
+  cursor: 'pointer'
+};
+
+const btnDangerStyle = {
+  padding: '8px 12px',
+  backgroundColor: '#ef4444',
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '12px',
+  cursor: 'pointer'
+};
+
+const resultadoStyle = (status) => ({
+  padding: '15px',
+  marginBottom: '20px',
+  borderRadius: '8px',
+  backgroundColor: status === 'ok' ? '#ecfdf5' : '#fef2f2',
+  border: `1px solid ${status === 'ok' ? '#10b981' : '#ef4444'}`,
+  color: status === 'ok' ? '#065f46' : '#7f1d1d'
+});
+
+const infoBoxStyle = {
+  padding: '15px',
+  backgroundColor: '#eff6ff',
+  border: '1px solid #93c5fd',
+  borderRadius: '8px',
+  fontSize: '13px',
+  color: '#1e40af'
+};

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/_common.sh"
+PY_BIN="$(pick_python)"
+ensure_grpc_req
+
+setup_one() {
+  local dir="$1"
+  local req="$2"
+  msg "Configurando venv em $dir"
+  cd "$dir"
+  if [[ ! -d .venv ]]; then
+    "$PY_BIN" -m venv .venv
+  fi
+  activate_venv
+  python -m pip install -U pip --quiet
+  pip install -r "$req"
+  deactivate || true
+}
+
+setup_one "$API_DIR" "$API_DIR/requirements.txt"
+setup_one "$WORKER_DIR" "$WORKER_DIR/requirements.txt"
+
+if [[ "$START_FRONTEND" == "1" ]]; then
+  command -v npm >/dev/null 2>&1 || { echo "npm não encontrado"; exit 1; }
+  msg "Instalando dependências do frontend"
+  cd "$FRONTEND_DIR"
+  npm install
+fi
+
+msg "Setup concluído."
