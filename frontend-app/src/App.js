@@ -6,7 +6,7 @@ import Clientes from './screens/Clientes';
 import Movimentacoes from './screens/Movimentacoes';
 import Monitoramento from './screens/Monitoramento';
 import Normalizacao from './screens/Normalizacao';
-import Configuracao from './screens/Configuracao';
+import Configuracao from './screens/Configuracao_v2';
 import CargaCoTit from './screens/Cargacotit';
 import Login from './screens/Login';
 
