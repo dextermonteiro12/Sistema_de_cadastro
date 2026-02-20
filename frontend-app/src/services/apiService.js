@@ -9,6 +9,22 @@ class ApiService {
   constructor() {
     this.configKey = null;
     this.config = null;
+    this.sessionId = null;
+    this.ambiente = null;
+    this.ensureSessionId();
+  }
+
+  ensureSessionId() {
+    const fromSession = sessionStorage.getItem('pld_session_id');
+    if (fromSession) {
+      this.sessionId = fromSession;
+      return this.sessionId;
+    }
+
+    const generated = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    this.sessionId = generated;
+    sessionStorage.setItem('pld_session_id', generated);
+    return generated;
   }
 
   /**
@@ -16,12 +32,19 @@ class ApiService {
    * @param {Object} config - { servidor, banco, usuario, senha }
    * @returns {Promise}
    */
-  async validarConfiguracao(config) {
+  async validarConfiguracao(config, options = {}) {
     try {
+      const sessionId = this.ensureSessionId();
+      const ambiente = options?.ambiente || null;
+
       const response = await fetch(`${API_BASE_URL}/config/validar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config })
+        body: JSON.stringify({
+          config,
+          session_id: sessionId,
+          ambiente
+        })
       });
 
       const data = await response.json();
@@ -30,8 +53,10 @@ class ApiService {
         // Salvar na sessão
         this.configKey = data.config_key;
         this.config = config;
+        this.ambiente = ambiente;
         sessionStorage.setItem('config_key', data.config_key);
         sessionStorage.setItem('pld_config', JSON.stringify(data.detalhes));
+        sessionStorage.setItem('pld_ambiente', ambiente || '');
 
         console.log(`✓ Config ativada: ${this.configKey}`);
         return { sucesso: true, ...data };
@@ -95,6 +120,39 @@ class ApiService {
   }
 
   /**
+    * Lista nomes de bases candidatas a partir do Advice.xml
+    * Aceita pasta raiz (com config/Advice.xml) ou caminho completo do XML
+    * @param {string} folderPath
+   */
+  async listarBasesDaPasta(folderPath) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/config/listar-bases-pasta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_path: folderPath })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          status: 'erro',
+          mensagem: data?.detail || 'Erro ao ler Advice.xml',
+          bases: []
+        };
+      }
+
+      return data;
+    } catch (error) {
+      return {
+        status: 'erro',
+        mensagem: error.message,
+        bases: []
+      };
+    }
+  }
+
+  /**
    * Fecha uma configuração
    */
   async fecharConfiguracao(configKey) {
@@ -146,16 +204,152 @@ class ApiService {
    * Carrega config da sessão se existir
    */
   carregarDaSessao() {
+    this.ensureSessionId();
     const configKey = sessionStorage.getItem('config_key');
     const config = sessionStorage.getItem('pld_config');
+    const ambiente = sessionStorage.getItem('pld_ambiente');
 
     if (configKey) {
       this.configKey = configKey;
       this.config = config ? JSON.parse(config) : null;
+      this.ambiente = ambiente || null;
       console.log(`✓ Config carregada da sessão: ${configKey}`);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Salva configuração do usuário (com credenciais criptografadas)
+   * @param {Object} config - { xml_path, sql_server, sql_username, sql_password, bases }
+   * @returns {Promise}
+   */
+  async salvarConfiguracao(config) {
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        console.error('❌ Token não encontrado');
+        return { status: 'erro', mensagem: 'Token de autenticação ausente' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user-config/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(config)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Configuração salva com sucesso:', data);
+        localStorage.setItem('user_config_id', data.config_id);
+        return { status: 'ok', ...data };
+      } else {
+        console.error('❌ Erro ao salvar config:', data);
+        return { status: 'erro', mensagem: data.detail || 'Erro ao salvar' };
+      }
+    } catch (error) {
+      console.error('❌ Erro ao salvar configuração:', error);
+      return { status: 'erro', mensagem: error.message };
+    }
+  }
+
+  /**
+   * Carrega configuração do usuário
+   * @returns {Promise}
+   */
+  async carregarConfiguracao() {
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        return { status: 'erro', mensagem: 'Token de autenticação ausente' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user-config/get`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Configuração carregada:', data);
+        return { status: 'ok', ...data };
+      } else {
+        console.warn('⚠️ Configuração não encontrada:', data);
+        return { status: 'nao_encontrada' };
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar configuração:', error);
+      return { status: 'erro', mensagem: error.message };
+    }
+  }
+
+  /**
+   * Carrega bases disponíveis do usuário
+   * @returns {Promise}
+   */
+  async carregarBases() {
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        return { total: 0, bases: [] };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user-config/bases`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log(`✅ ${data.total} base(s) carregada(s)`);
+        return data;
+      } else {
+        return { total: 0, bases: [] };
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar bases:', error);
+      return { total: 0, bases: [] };
+    }
+  }
+
+  /**
+   * Carrega informações da configuração (sem senhas)
+   * @returns {Promise}
+   */
+  async carregarInfoConfiguracao() {
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        return { status: 'nao_autenticado' };
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user-config/info`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('❌ Erro ao carregar info:', error);
+      return { status: 'erro' };
+    }
   }
 
   /**
@@ -164,8 +358,10 @@ class ApiService {
   limpar() {
     this.configKey = null;
     this.config = null;
+    this.ambiente = null;
     sessionStorage.removeItem('config_key');
     sessionStorage.removeItem('pld_config');
+    sessionStorage.removeItem('pld_ambiente');
   }
 }
 

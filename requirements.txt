@@ -12,3 +12,7 @@ strawberry-graphql[asgi]>=0.230.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn>=0.30.0
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+httpx==0.25.1

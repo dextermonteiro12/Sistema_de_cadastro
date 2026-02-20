@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 
 import Home from './screens/home';
 import Clientes from './screens/Clientes';
@@ -8,6 +8,7 @@ import Monitoramento from './screens/Monitoramento';
 import Normalizacao from './screens/Normalizacao';
 import Configuracao from './screens/Configuracao';
 import CargaCoTit from './screens/Cargacotit';
+import Login from './screens/Login';
 
 import { ConfigProvider, useConfig } from './context/ConfigContext';
 import './App.css';
@@ -54,83 +55,32 @@ const btnLogout = {
   fontSize: '12px'
 };
 
-const authContainerStyle = { 
-  display: 'flex', 
-  justifyContent: 'center', 
-  alignItems: 'center', 
-  height: '100vh', 
-  backgroundColor: '#20232a' 
-};
-
-const authBoxStyle = { 
-  backgroundColor: 'white', 
-  padding: '40px', 
-  borderRadius: '10px', 
-  textAlign: 'center',
-  maxWidth: '400px'
-};
-
-const inputStyle = { 
-  width: '100%', 
-  padding: '10px', 
-  margin: '5px 0', 
-  borderRadius: '4px', 
-  border: '1px solid #ddd',
-  boxSizing: 'border-box'
-};
-
-const btnSubmitStyle = { 
-  ...inputStyle, 
-  backgroundColor: '#007bff', 
-  color: 'white', 
-  cursor: 'pointer', 
-  fontWeight: 'bold'
-};
-
-// ===== COMPONENTE LOGIN =====
-const AuthSystem = ({ onLogin, carregando }) => {
-  const [user, setUser] = useState('');
-  const [pass, setPass] = useState('');
-
-  return (
-    <div style={authContainerStyle}>
-      <div style={authBoxStyle}>
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>
-          🚀 Gerador Ágil PLD v2.0
-        </h2>
-        <form onSubmit={(e) => { e.preventDefault(); onLogin(user, pass); }}>
-          <input
-            type="text"
-            placeholder="Usuário"
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            style={inputStyle}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            style={inputStyle}
-            required
-          />
-          <button
-            type="submit"
-            style={btnSubmitStyle}
-            disabled={carregando}
-          >
-            {carregando ? '⌛ Entrando...' : 'Entrar'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 // ===== COMPONENTE NAVBAR COM STATUS =====
-function NavBar({ userTipo, onLogout }) {
+function NavBar() {
+  const navigate = useNavigate();
   const { config, status } = useConfig();
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('auth_token');
+    
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (e) {
+      console.error('Erro ao fazer logout:', e);
+    }
+
+    // Limpar localStorage e redirecionar para login
+    localStorage.clear();
+    sessionStorage.clear();
+    navigate('/login');
+    window.location.reload();
+  };
 
   return (
     <nav style={navStyle}>
@@ -151,7 +101,7 @@ function NavBar({ userTipo, onLogout }) {
             <span>✗ Sem conexão</span>
           )}
         </div>
-        <button onClick={onLogout} style={btnLogout}>
+        <button onClick={handleLogout} style={btnLogout}>
           Sair
         </button>
       </div>
@@ -159,79 +109,89 @@ function NavBar({ userTipo, onLogout }) {
   );
 }
 
-// ===== COMPONENTE PRINCIPAL =====
+// ===== COMPONENTE PRINCIPAL COM ROTAS =====
 function AppContent() {
-  const [autenticado, setAutenticado] = useState(false);
-  const [userTipo, setUserTipo] = useState('VISUALIZADOR');
-  const [carregando, setCarregando] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (localStorage.getItem('pld_autenticado') === 'true') {
-      setAutenticado(true);
-      setUserTipo(localStorage.getItem('pld_tipo') || 'VISUALIZADOR');
+    // Verificar se tem token válido ao iniciar
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      validateToken(token);
+    } else {
+      setLoading(false);
+      navigate('/login');
     }
-  }, []);
+  }, [navigate]);
 
-  const handleLogin = async (usuario, senha) => {
-    setCarregando(true);
+  const validateToken = async (token) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/validate-token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: usuario, password: senha })
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        setAutenticado(true);
-        setUserTipo(data.tipo);
-        localStorage.setItem('pld_autenticado', 'true');
-        localStorage.setItem('pld_tipo', data.tipo);
+      if (data.valid) {
+        setIsLoggedIn(true);
       } else {
-        alert('❌ ' + (data.message || 'Erro ao fazer login'));
+        localStorage.removeItem('auth_token');
+        navigate('/login');
       }
     } catch (e) {
-      alert('❌ Erro ao conectar com API');
+      console.error('Erro ao validar token:', e);
+      localStorage.removeItem('auth_token');
+      navigate('/login');
     } finally {
-      setCarregando(false);
+      setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    setAutenticado(false);
-    window.location.reload();
+  const handleLoginSuccess = (user) => {
+    setIsLoggedIn(true);
+    navigate('/');
   };
 
-  if (!autenticado) {
-    return <AuthSystem onLogin={handleLogin} carregando={carregando} />;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <h2>⌛ Carregando...</h2>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
-    <Router>
-      <div style={{ padding: '20px' }}>
-        <NavBar userTipo={userTipo} onLogout={handleLogout} />
+    <div style={{ padding: '20px' }}>
+      <NavBar />
 
-        <Routes>
-          <Route path="/" element={<Home userTipo={userTipo} />} />
-          <Route path="/configuracao" element={<Configuracao />} />
-          <Route path="/clientes" element={<Clientes />} />
-          <Route path="/Cargacotit" element={<CargaCoTit />} />
-          <Route path="/movimentacoes" element={<Movimentacoes />} />
-          <Route path="/normalizacao" element={<Normalizacao />} />
-          <Route path="/monitoramento" element={<Monitoramento />} />
-        </Routes>
-      </div>
-    </Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/configuracao" element={<Configuracao />} />
+        <Route path="/clientes" element={<Clientes />} />
+        <Route path="/Cargacotit" element={<CargaCoTit />} />
+        <Route path="/movimentacoes" element={<Movimentacoes />} />
+        <Route path="/normalizacao" element={<Normalizacao />} />
+        <Route path="/monitoramento" element={<Monitoramento />} />
+        <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+      </Routes>
+    </div>
   );
 }
 
-// ===== APP WRAPPER COM CONTEXT =====
+// ===== APP WRAPPER COM CONTEXT E ROUTER =====
 export default function App() {
   return (
-    <ConfigProvider>
-      <AppContent />
-    </ConfigProvider>
+    <Router>
+      <ConfigProvider>
+        <AppContent />
+      </ConfigProvider>
+    </Router>
   );
 }

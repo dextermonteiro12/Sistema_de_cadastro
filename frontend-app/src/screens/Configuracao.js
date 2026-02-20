@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useConfig } from '../context/ConfigContext';
+import { apiService } from '../services/apiService';
 
 
 export default function Configuracao() {
-  const { configKey, config, status, carregando, erro, validarConfig, testarConexao, desconectar } = useConfig();
+  const { configKey, config, ambiente, status, carregando, erro, validarConfig, testarConexao, desconectar } = useConfig();
 
   const [formData, setFormData] = useState({
     servidor: config?.servidor || '',
@@ -14,6 +15,16 @@ export default function Configuracao() {
 
   const [testando, setTestando] = useState(false);
   const [statusTeste, setStatusTeste] = useState(null);
+  const [folderPath, setFolderPath] = useState('');
+  const [basesDaPasta, setBasesDaPasta] = useState([]);
+  const [baseSelecionadaId, setBaseSelecionadaId] = useState('');
+  const [carregandoBasesPasta, setCarregandoBasesPasta] = useState(false);
+  const [erroBasesPasta, setErroBasesPasta] = useState(null);
+  const [mensagemXml, setMensagemXml] = useState(null);
+
+  const carregarBasesAtivas = useCallback(async () => {
+    // Placeholder - can be removed in future refactor
+  }, []);
 
   // Handle form change
   const handleChange = (e) => {
@@ -24,6 +35,108 @@ export default function Configuracao() {
     }));
   };
 
+  const handleCarregarBasesDaPasta = async () => {
+    if (!folderPath.trim()) {
+      alert('⚠️ Informe o caminho da pasta raiz ou do Advice.xml');
+      return;
+    }
+
+    setCarregandoBasesPasta(true);
+    setErroBasesPasta(null);
+    setMensagemXml(null);
+
+    console.log('🔍 Iniciando leitura de Advice.xml para:', folderPath.trim());
+
+    try {
+      const resultado = await apiService.listarBasesDaPasta(folderPath.trim());
+      
+      console.log('📥 Resposta do servidor:', resultado);
+
+      if (resultado.status !== 'ok') {
+        setBasesDaPasta([]);
+        const msgErro = resultado.mensagem || 'Não foi possível ler o Advice.xml';
+        setErroBasesPasta(`❌ ${msgErro}`);
+        console.error('Erro ao ler XML:', msgErro);
+        return;
+      }
+
+      const lista = Array.isArray(resultado.bases) ? resultado.bases : [];
+      console.log(`✅ ${lista.length} base(s) encontrada(s) no XML`);
+
+      const normalizadas = lista.map((item, idx) => {
+        if (typeof item === 'string') {
+          return {
+            id: `base-${idx}`,
+            sistema: 'N/A',
+            empresa: item,
+            servidor: formData.servidor || '',
+            banco: item,
+            usuario: formData.usuario || '',
+            label: item
+          };
+        }
+
+        return {
+          id: item.id || `base-${idx}`,
+          sistema: item.sistema || 'N/A',
+          empresa: item.empresa || item.banco || `Empresa ${idx + 1}`,
+          servidor: item.servidor || '',
+          banco: item.banco || '',
+          usuario: item.usuario || '',
+          label: item.label || `${item.sistema || 'N/A'} | ${item.empresa || '-'} | ${item.banco || '-'}`
+        };
+      }).filter((item) => item.banco);
+
+      setBasesDaPasta(normalizadas);
+
+      if (normalizadas.length > 0) {
+        const primeira = normalizadas[0];
+        setBaseSelecionadaId(primeira.id);
+        setFormData((prev) => ({
+          ...prev,
+          servidor: primeira.servidor || prev.servidor,
+          banco: primeira.banco,
+          usuario: primeira.usuario || prev.usuario
+        }));
+        const msg = `✅ XML lido com sucesso: ${normalizadas.length} base(s) encontrada(s)`;
+        setMensagemXml(msg);
+        console.log(msg);
+        normalizadas.forEach(base => {
+          console.log(`  📊 ${base.label} | ${base.servidor}`);
+        });
+      } else {
+        setBaseSelecionadaId('');
+        setMensagemXml('⚠️ XML lido, mas nenhuma base válida foi encontrada');
+        console.warn('Nenhuma base válida encontrada no XML');
+      }
+    } catch (error) {
+      console.error('💥 Erro ao tentar ler Advice.xml:', error);
+      setBasesDaPasta([]);
+      setErroBasesPasta(`❌ Erro: ${error.message}`);
+    } finally {
+      setCarregandoBasesPasta(false);
+    }
+  };
+
+  const handleSelecionarBaseXml = (e) => {
+    const id = e.target.value;
+    setBaseSelecionadaId(id);
+
+    const base = basesDaPasta.find((item) => item.id === id);
+    if (!base) {
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      servidor: base.servidor || prev.servidor,
+      banco: base.banco,
+      usuario: base.usuario || prev.usuario
+    }));
+  };
+
+  const baseSelecionadaXml = basesDaPasta.find((item) => item.id === baseSelecionadaId) || null;
+
   // Validar configuração
   const handleValidar = async (e) => {
     e.preventDefault();
@@ -33,10 +146,37 @@ export default function Configuracao() {
       return;
     }
 
-    const resultado = await validarConfig(formData);
+    const resultado = await validarConfig(formData, {
+      ambiente: baseSelecionadaXml?.label || formData.banco
+    });
     
     if (resultado.sucesso) {
-      alert(`✅ Configuração ativada com sucesso!\nVersão: ${resultado.detalhes.versao_sistema}`);
+      // Salvar configuração do usuário no banco SQLite
+      const configData = {
+        xml_path: folderPath || 'N/A',
+        sql_server: formData.servidor,
+        sql_username: formData.usuario,
+        sql_password: formData.senha,
+        bases: basesDaPasta.length > 0 ? basesDaPasta : [
+          {
+            id: formData.banco,
+            sistema: 'Manual',
+            empresa: 'Manual',
+            servidor: formData.servidor,
+            banco: formData.banco,
+            usuario: formData.usuario,
+            label: formData.banco
+          }
+        ]
+      };
+
+      const saveResult = await apiService.salvarConfiguracao(configData);
+      
+      if (saveResult.status === 'ok') {
+        alert(`✅ Configuração salva com sucesso!\nVersão: ${resultado.detalhes.versao_sistema}\nBases: ${saveResult.total_bases}`);
+      } else {
+        alert(`✅ Banco validado!\nMas erro ao salvar localizado: ${saveResult.mensagem}`);
+      }
     } else {
       alert(`❌ Erro: ${resultado.erro}`);
     }
@@ -73,33 +213,44 @@ export default function Configuracao() {
     <div style={containerStyle}>
       <h2>⚙️ Configuração de Banco de Dados</h2>
 
-      {/* Status Card */}
-      <div style={statusCardStyle(status)}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <strong style={{ fontSize: '14px' }}>Status da Conexão</strong>
-            <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#666' }}>
-              {status === 'conectado' && (
-                <>
-                  ✅ Conectado como: <code>{config?.usuario}@{config?.servidor}</code>
-                  <br/>
-                  Config Key: <code style={{ fontSize: '10px' }}>{configKey}</code>
-                </>
-              )}
-              {status === 'desconectado' && '❌ Desconectado - Nenhuma configuração ativa'}
-              {status === 'erro' && `⚠️ Erro: ${erro}`}
-            </p>
-          </div>
-          {status === 'conectado' && (
-            <button onClick={handleDesconectar} style={btnDangerStyle}>
-              🔌 Desconectar
-            </button>
-          )}
-        </div>
-      </div>
+
 
       {/* Form */}
       <form onSubmit={handleValidar} style={formStyle}>
+        <div style={fieldGroupStyle}>
+          <label>Caminho do Advice.xml</label>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="text"
+              placeholder="ex: C:\\Advice (ou C:\\Advice\\config\\Advice.xml)"
+              value={folderPath}
+              onChange={(e) => setFolderPath(e.target.value)}
+              disabled={carregando || testando || carregandoBasesPasta}
+              style={inputStyle}
+            />
+            <button
+              type="button"
+              onClick={handleCarregarBasesDaPasta}
+              disabled={carregando || testando || carregandoBasesPasta}
+              style={btnSecondaryLargeStyle}
+            >
+              {carregandoBasesPasta ? '⌛ Lendo XML...' : '📄 Ler Advice.xml'}
+            </button>
+          </div>
+          <small style={helpTextStyle}>
+            Informe a pasta raiz (ex.: C:\\Advice) para ler automaticamente C:\\Advice\\config\\Advice.xml
+          </small>
+          <small style={helpTextStyle}>
+            A senha NÃO é lida do XML; informe a senha manualmente para autenticar.
+          </small>
+          {erroBasesPasta && (
+            <small style={{ ...helpTextStyle, color: '#b91c1c' }}>{erroBasesPasta}</small>
+          )}
+          {mensagemXml && !erroBasesPasta && (
+            <small style={{ ...helpTextStyle, color: '#166534' }}>{mensagemXml}</small>
+          )}
+        </div>
+
         <div style={fieldGroupStyle}>
           <label>Servidor SQL Server</label>
           <input
@@ -116,16 +267,35 @@ export default function Configuracao() {
 
         <div style={fieldGroupStyle}>
           <label>Banco de Dados</label>
-          <input
-            type="text"
-            name="banco"
-            placeholder="ex: PLD"
-            value={formData.banco}
-            onChange={handleChange}
-            disabled={carregando || testando}
-            style={inputStyle}
-          />
-          <small style={helpTextStyle}>Nome do banco de dados PLD</small>
+          {basesDaPasta.length > 0 ? (
+            <>
+              <select
+                name="banco_xml"
+                value={baseSelecionadaId}
+                onChange={handleSelecionarBaseXml}
+                disabled={carregando || testando}
+                style={inputStyle}
+              >
+                {basesDaPasta.map((base) => (
+                  <option key={base.id} value={base.id}>{base.label}</option>
+                ))}
+              </select>
+              <small style={helpTextStyle}>Base selecionada do Advice.xml ({basesDaPasta.length} encontrada(s), ex.: CORP e EGUARDIAN)</small>
+            </>
+          ) : (
+            <>
+              <input
+                type="text"
+                name="banco"
+                placeholder="ex: PLD"
+                value={formData.banco}
+                onChange={handleChange}
+                disabled={carregando || testando}
+                style={inputStyle}
+              />
+              <small style={helpTextStyle}>Nome do banco de dados PLD</small>
+            </>
+          )}
         </div>
 
         <div style={fieldGroupStyle}>
@@ -161,7 +331,7 @@ export default function Configuracao() {
             type="button"
             onClick={handleTestar}
             disabled={carregando || testando}
-            style={btnSecondaryStyle}
+            style={btnSecondaryLargeStyle}
           >
             {testando ? '⌛ Testando...' : '🔍 Testar Conexão'}
           </button>
@@ -227,6 +397,15 @@ const formStyle = {
   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
 };
 
+const baseTagStyle = {
+  display: 'inline-block',
+  padding: '6px 10px',
+  borderRadius: '999px',
+  border: '1px solid',
+  fontSize: '11px',
+  color: '#1f2937'
+};
+
 const fieldGroupStyle = {
   marginBottom: '15px'
 };
@@ -267,7 +446,7 @@ const btnPrimaryStyle = {
   transition: 'background-color 0.2s'
 };
 
-const btnSecondaryStyle = {
+const btnSecondaryLargeStyle = {
   flex: 1,
   padding: '10px',
   backgroundColor: '#6c757d',
@@ -276,16 +455,6 @@ const btnSecondaryStyle = {
   borderRadius: '4px',
   fontSize: '14px',
   fontWeight: 'bold',
-  cursor: 'pointer'
-};
-
-const btnDangerStyle = {
-  padding: '8px 12px',
-  backgroundColor: '#ef4444',
-  color: 'white',
-  border: 'none',
-  borderRadius: '4px',
-  fontSize: '12px',
   cursor: 'pointer'
 };
 

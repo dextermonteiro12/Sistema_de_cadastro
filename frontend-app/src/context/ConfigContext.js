@@ -10,6 +10,7 @@ export const ConfigContext = createContext();
 export function ConfigProvider({ children }) {
   const [configKey, setConfigKey] = useState(null);
   const [config, setConfig] = useState(null);
+  const [ambiente, setAmbiente] = useState(null);
   const [status, setStatus] = useState('desconectado');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -19,20 +20,22 @@ export function ConfigProvider({ children }) {
     if (apiService.carregarDaSessao()) {
       setConfigKey(apiService.configKey);
       setConfig(apiService.config);
+      setAmbiente(apiService.ambiente || null);
       setStatus('conectado');
     }
   }, []);
 
-  const validarConfig = useCallback(async (configData) => {
+  const validarConfig = useCallback(async (configData, options = {}) => {
     setCarregando(true);
     setErro(null);
 
     try {
-      const resultado = await apiService.validarConfiguracao(configData);
+      const resultado = await apiService.validarConfiguracao(configData, options);
 
       if (resultado.sucesso) {
         setConfigKey(resultado.config_key);
         setConfig(configData);
+        setAmbiente(options?.ambiente || null);
         setStatus('conectado');
         return { sucesso: true, ...resultado };
       } else {
@@ -68,6 +71,7 @@ export function ConfigProvider({ children }) {
     apiService.limpar();
     setConfigKey(null);
     setConfig(null);
+    setAmbiente(null);
     setStatus('desconectado');
     setErro(null);
   }, [configKey]);
@@ -75,6 +79,7 @@ export function ConfigProvider({ children }) {
   const value = {
     configKey,
     config,
+    ambiente,
     status,
     carregando,
     erro,

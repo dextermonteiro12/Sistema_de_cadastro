@@ -9,6 +9,8 @@ import asyncio
 import json
 
 from routes.config import router as config_router
+from routes.auth import router as auth_router
+from routes.user_config import router as user_config_router
 from database import get_db_session, db_manager
 from schema import schema
 from grpc_client import gerar_clientes as grpc_gerar_clientes, job_status as grpc_job_status
@@ -26,6 +28,13 @@ app.add_middleware(
   allow_headers=["*"],
 )
 
+# Rotas de autenticação (sem proteção)
+app.include_router(auth_router)
+
+# Rotas de configuração do usuário (com proteção JWT)
+app.include_router(user_config_router)
+
+# Rotas de configuração
 app.include_router(config_router)
 
 def _get_graphql_context(request: Request):
