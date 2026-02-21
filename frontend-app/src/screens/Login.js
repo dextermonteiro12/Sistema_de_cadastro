@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function Login({ onLoginSuccess }) {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -32,7 +34,7 @@ export default function Login({ onLoginSuccess }) {
 
     try {
       const endpoint = isRegister ? '/auth/register' : '/auth/login';
-      const apiUrl = `http://localhost:5000${endpoint}`;
+      const apiUrl = `${API_BASE_URL}${endpoint}`;
       
       console.log(`🔄 Enviando ${isRegister ? 'registro' : 'login'} para:`, apiUrl);
 
@@ -94,7 +96,7 @@ export default function Login({ onLoginSuccess }) {
       
       let errorMsg = 'Erro ao conectar com o servidor';
       if (err instanceof TypeError && err.message === 'Failed to fetch') {
-        errorMsg = 'Não consegui conectar ao servidor. Verifique se o backend está rodando em http://localhost:5000';
+        errorMsg = `Não consegui conectar ao servidor. Verifique se o backend está rodando em ${API_BASE_URL}`;
       } else if (err.message) {
         errorMsg = err.message;
       }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiService } from '../services/apiService';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -11,10 +12,14 @@ export default function CargaCoTit() {
   };
 
   const executarCarga = async () => {
-    const configSql = sessionStorage.getItem('pld_sql_config');
-    if (!configSql) return alert("⚠️ Configure o ambiente SQL primeiro!");
+    const conf = apiService.carregarSqlConfig();
+    const baseAtiva = apiService.carregarBaseAtiva();
+    if (!conf || !baseAtiva?.banco) return alert("⚠️ Configure o ambiente SQL e selecione a base primeiro!");
 
-    const conf = JSON.parse(configSql);
+    const configFinal = {
+      ...conf,
+      banco: baseAtiva.banco
+    };
     const confirmacao = window.confirm(`Inicia carga CO_TIT para o Layout ${conf.versao}? Isso irá resetar a tabela TAB_CLIENTES_CO_TIT_PLD.`);
     
     if (!confirmacao) return;
@@ -26,7 +31,7 @@ export default function CargaCoTit() {
       const res = await fetch(`${API_BASE_URL}/executar_carga_cotit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: conf })
+        body: JSON.stringify({ config: configFinal })
       });
 
       const data = await res.json();

@@ -25,9 +25,26 @@ class Query:
     @strawberry.field
     async def health_check(self, info: Info) -> HealthType:
         from database import check_db_health
-        config_key = (info.context or {}).get("config_key")
+        
+        # Validar contexto (autenticação + autorização)
+        context = info.context or {}
+        if context.get("error"):
+            return HealthType(
+                status="unauthorized", 
+                pool_size=0, 
+                pool_checked_out=0, 
+                message=context["error"]
+            )
+        
+        config_key = context.get("config_key")
         if not config_key:
-            return HealthType(status="unavailable", pool_size=0, pool_checked_out=0, message="config_key missing")
+            return HealthType(
+                status="unavailable", 
+                pool_size=0, 
+                pool_checked_out=0, 
+                message="config_key missing"
+            )
+        
         health = await check_db_health(config_key)
         return HealthType(
             status=health.get("status", "unknown"),
@@ -40,9 +57,25 @@ class Query:
     async def monitoramento_status(self, info: Info) -> MonitoramentoType:
         from database import get_db_session
         from sqlalchemy import text
-        config_key = (info.context or {}).get("config_key")
+        
+        # Validar contexto
+        context = info.context or {}
+        if context.get("error"):
+            return MonitoramentoType(
+                fila_pendente=0, 
+                status_geral="UNAUTHORIZED", 
+                timestamp=datetime.now(), 
+                clientes_conectados=0
+            )
+        
+        config_key = context.get("config_key")
         if not config_key:
-            return MonitoramentoType(fila_pendente=0, status_geral="UNKNOWN", timestamp=datetime.now(), clientes_conectados=0)
+            return MonitoramentoType(
+                fila_pendente=0, 
+                status_geral="UNKNOWN", 
+                timestamp=datetime.now(), 
+                clientes_conectados=0
+            )
 
         try:
             with get_db_session(config_key) as session:
@@ -52,15 +85,24 @@ class Query:
             fila = 0
 
         status = "CRITICO" if fila > 1000 else "ESTAVEL" if fila > 100 else "SAUDAVEL"
-        return MonitoramentoType(fila_pendente=fila, status_geral=status, timestamp=datetime.now(), clientes_conectados=0)
+        return MonitoramentoType(
+            fila_pendente=fila, 
+            status_geral=status, 
+            timestamp=datetime.now(), 
+            clientes_conectados=0
+        )
 
     @strawberry.field
     async def clientes_count(self, info: Info) -> int:
         from database import get_db_session
         from sqlalchemy import text
-        config_key = (info.context or {}).get("config_key")
-        if not config_key:
+        
+        # Validar contexto
+        context = info.context or {}
+        if context.get("error") or not context.get("config_key"):
             return 0
+        
+        config_key = context["config_key"]
         try:
             with get_db_session(config_key) as session:
                 result = session.execute(text("SELECT COUNT(*) FROM TAB_CLIENTES_PLD WITH (NOLOCK)"))

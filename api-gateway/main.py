@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from strawberry.fastapi import GraphQLRouter
@@ -7,13 +7,15 @@ from sqlalchemy import text
 import logging
 import asyncio
 import json
+from typing import Optional
 
 from routes.config import router as config_router
-from routes.auth import router as auth_router
+from routes.auth import router as auth_router, verify_jwt_token
 from routes.user_config import router as user_config_router
 from database import get_db_session, db_manager
 from schema import schema
 from grpc_client import gerar_clientes as grpc_gerar_clientes, job_status as grpc_job_status
+from auth_database import AuthDB
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,12 +39,126 @@ app.include_router(user_config_router)
 # Rotas de configuração
 app.include_router(config_router)
 
+def _get_user_id_from_request(request: Request) -> Optional[str]:
+    """
+    Extrai user_id do token JWT no header Authorization.
+    Retorna None se token ausente ou inválido.
+    """
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return None
+    
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    
+    token = parts[1]
+    payload = verify_jwt_token(token)
+    
+    if not payload:
+        return None
+    
+    return payload.get("user_id")
+
+
+def _validate_user_owns_config(user_id: str, config_key: str) -> bool:
+    """
+    Valida se o config_key pertence ao usuário.
+    Verifica se config_key está nas bases configuradas pelo usuário.
+    """
+    try:
+        user_config = AuthDB.get_user_config(user_id)
+        if not user_config:
+            return False
+        
+        # Verificar se config_key existe nas bases do usuário
+        bases = user_config.get("bases", [])
+        for base in bases:
+            if base.get("config_key") == config_key:
+                return True
+        
+        return False
+    except Exception as e:
+        logger.error(f"Erro ao validar config do usuário: {e}")
+        return False
+
+
+def _require_user_config(request: Request, body: dict) -> tuple[Optional[str], Optional[str], Optional[JSONResponse]]:
+    """
+    Helper que valida autenticação e autorização para config_key.
+    
+    Returns:
+        (user_id, config_key, error_response)
+        - Se sucesso: (user_id, config_key, None)
+        - Se erro: (None, None, JSONResponse com erro)
+    
+    Usage:
+        user_id, config_key, error = _require_user_config(request, body)
+        if error:
+            return error
+        
+        # Continuar com lógica da rota...
+    """
+    # 1. Validar autenticação
+    user_id = _get_user_id_from_request(request)
+    if not user_id:
+        return None, None, JSONResponse(
+            {"erro": "Não autenticado. Token JWT ausente ou inválido."},
+            status_code=401
+        )
+    
+    # 2. Obter config_key
+    config_key = _resolve_config_key(request, body or {})
+    if not config_key:
+        return None, None, JSONResponse(
+            {"erro": "config_key não informado"},
+            status_code=400
+        )
+    
+    # 3. Validar autorização
+    if not _validate_user_owns_config(user_id, config_key):
+        logger.warning(f"Usuário {user_id} tentou acessar config_key {config_key} sem autorização")
+        return None, None, JSONResponse(
+            {"erro": "Você não tem permissão para acessar esta configuração"},
+            status_code=403
+        )
+    
+    return user_id, config_key, None
+
+
 def _get_graphql_context(request: Request):
-    return {"config_key": _resolve_config_key(request, {})}
+    """
+    Fornece contexto para resolvers GraphQL.
+    Valida autenticação e autorização antes de fornecer config_key.
+    """
+    # Extrair config_key do request
+    config_key = _resolve_config_key(request, {})
+    
+    # Se não há config_key, retornar contexto sem ele
+    if not config_key:
+        return {"config_key": None, "user_id": None, "error": "config_key não informado"}
+    
+    # Validar autenticação
+    user_id = _get_user_id_from_request(request)
+    if not user_id:
+        return {"config_key": None, "user_id": None, "error": "Não autenticado"}
+    
+    # Validar autorização
+    if not _validate_user_owns_config(user_id, config_key):
+        logger.warning(f"GraphQL: Usuário {user_id} tentou acessar config_key {config_key} sem autorização")
+        return {"config_key": None, "user_id": user_id, "error": "Não autorizado para esta configuração"}
+    
+    # Sucesso - contexto válido
+    return {"config_key": config_key, "user_id": user_id, "error": None}
 
 app.include_router(GraphQLRouter(schema, context_getter=_get_graphql_context), prefix="/graphql")
 
 def _resolve_config_key(request: Request, body: dict) -> str | None:
+    """
+    Resolve config_key de body ou headers.
+    ⚠️ ATENÇÃO: Esta função NÃO valida se config_key pertence ao usuário!
+    Use _validate_user_owns_config() para validar.
+    """
     return (
         body.get("config_key")
         or request.headers.get("X-Config-Key")
@@ -136,9 +252,16 @@ async def login(body: dict):
 
 @app.post("/api/saude-servidor")
 async def saude_servidor(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"erro": "config_key não informado"}, status_code=400)
+    """
+    Retorna indicadores de saúde do servidor.
+    Requer autenticação JWT e valida que config_key pertence ao usuário.
+    """
+    # Validar autenticação e autorização
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
+    
+    # Executar operação
     try:
         dash = _collect_dashboard(config_key)
         fila_pendente = dash["fila_geral"]["pendente"]
@@ -179,10 +302,11 @@ async def saude_servidor(request: Request, body: dict):
 
 @app.post("/api/clientes-pendentes")
 async def clientes_pendentes(request: Request, body: dict):
-    """Retorna quantidade de clientes sem integrar"""
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"erro": "config_key não informado"}, status_code=400)
+    """Retorna quantidade de clientes sem integrar. Requer autenticação."""
+    # Validar autenticação e autorização
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     
     try:
         with get_db_session(config_key) as session:
@@ -220,9 +344,9 @@ async def clientes_pendentes(request: Request, body: dict):
 
 @app.post("/status_dashboard")
 async def status_dashboard(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key não informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         return _collect_dashboard(config_key)
     except Exception as e:
@@ -230,9 +354,9 @@ async def status_dashboard(request: Request, body: dict):
 
 @app.post("/api/dashboard/log-pesquisas")
 async def log_pesquisas(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key não informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         dash = _collect_dashboard(config_key)
         lp = dash["log_pesquisas"]
@@ -242,9 +366,9 @@ async def log_pesquisas(request: Request, body: dict):
 
 @app.post("/api/dashboard/fila-adsvc")
 async def fila_adsvc(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key não informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         dash = _collect_dashboard(config_key)
         fg = dash["fila_geral"]
@@ -254,9 +378,9 @@ async def fila_adsvc(request: Request, body: dict):
 
 @app.post("/api/dashboard/performance-workers")
 async def perf_workers(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key não informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         dash = _collect_dashboard(config_key)
         dados = [{
@@ -270,8 +394,10 @@ async def perf_workers(request: Request, body: dict):
         return JSONResponse({"status":"erro","erro":str(e)}, status_code=500)
 
 @app.post("/gerar_clientes")
-async def gerar_clientes(body: dict):
-    config_key = body.get("config_key")
+async def gerar_clientes(request: Request, body: dict):
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     quantidade = body.get("quantidade", 100)
     return {"status": "ok", "mensagem": f"Gerando {quantidade} clientes...", "config_key": config_key}
 
@@ -280,14 +406,17 @@ async def monitoramento(body: dict):
     return {"status": "ok", "mensagem": "Sistema operacional", "workers_ativos": 4, "registros_processados": 15000}
 
 @app.post("/movimentacoes")
-async def movimentacoes(body: dict):
+async def movimentacoes(request: Request, body: dict):
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     return {"status": "ok", "mensagem": "Movimentações processadas", "total": 250}
 
 @app.post("/check_ambiente")
 async def check_ambiente(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key nao informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         with get_db_session(config_key) as session:
             try:
@@ -313,9 +442,9 @@ async def check_ambiente(request: Request, body: dict):
 
 @app.post("/setup_ambiente")
 async def setup_ambiente(request: Request, body: dict):
-    config_key = _resolve_config_key(request, body or {})
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key nao informado"}, status_code=400)
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
     try:
         with get_db_session(config_key) as session:
             session.execute(text("IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TAB_CLIENTES_PLD' AND xtype='U') CREATE TABLE TAB_CLIENTES_PLD (CD_CLIENTE char(20) PRIMARY KEY, DE_CLIENTE varchar(120))"))
@@ -328,10 +457,10 @@ async def setup_ambiente(request: Request, body: dict):
         return JSONResponse({"status":"erro","erro":str(e)}, status_code=500)
 
 @app.post("/grpc/gerar_clientes")
-async def grpc_gerar_clientes_endpoint(body: dict):
-    config_key = body.get("config_key")
-    if not config_key:
-        return JSONResponse({"status":"erro","message":"config_key nao informado"}, status_code=400)
+async def grpc_gerar_clientes_endpoint(request: Request, body: dict):
+    user_id, config_key, error = _require_user_config(request, body or {})
+    if error:
+        return error
 
     config = db_manager.get_config(config_key)
     if not config:

@@ -20,58 +20,85 @@ const Home = () => {
   const comboRef = useRef(null);
 
   const carregarBases = useCallback(async () => {
+    console.log('📦 Iniciando carregamento de bases...');
     try {
       // Carregar bases do usuário do banco SQLite
       const resultado = await apiService.carregarBases();
       
+      console.log('🟢 Resposta do backend:', resultado);
+      
       let lista = [];
       
-      if (resultado.total > 0 && resultado.bases) {
+      if (resultado.status === 'ok' && resultado.total > 0 && resultado.bases) {
         // Usar as bases do usuário
         lista = resultado.bases.map(base => ({
           id: base.id,
           label: base.label,
           sistema: base.sistema,
-          banco: base.banco
+          banco: base.banco,
+          config_key: base.config_key // 🔑 Incluir config_key
         }));
+        console.log(`✅ ${lista.length} base(s) carregada(s):`);
+        lista.forEach(b => console.log(`   - ${b.label}`));
+      } else {
+        console.warn('⚠️ Nenhuma base encontrada ou status não ok:', resultado);
       }
 
       setBasesDisponiveis(lista);
+      setErro(null);
       
       // Selecionar a primeira base se houver
       if (lista.length > 0) {
-        setBaseSelecionada(lista[0].id);
+        const baseAtivaSalva = apiService.carregarBaseAtiva();
+        const basePersistida = lista.find((base) => base.id === baseAtivaSalva?.id);
+        const baseInicial = basePersistida || lista[0];
+        setBaseSelecionada(baseInicial.id);
+        apiService.salvarBaseAtiva(baseInicial);
+        console.log(`🎯 Base padrão selecionada: ${baseInicial.label}`);
       } else {
         setBaseSelecionada('');
+        console.warn('⚠️ Nenhuma base disponível para seleção');
+        setErro('Nenhuma base configurada. Por favor, acesse Configuração primeiro.');
       }
     } catch (e) {
-      console.error('Erro ao carregar bases:', e);
+      console.error('🔴 Erro ao carregar bases:', e);
       setBasesDisponiveis([]);
       setBaseSelecionada('');
+      setErro(`Erro ao carregar bases: ${e.message}`);
     }
   }, []);
 
-  const buscarIndicadoresBase = useCallback(async (base) => {
+  const buscarIndicadoresBase = useCallback(async (baseId) => {
+    // 🔑 Buscar a base completa para obter config_key
+    const baseCompleta = basesDisponiveis.find(b => b.id === baseId);
+    const configKey = baseCompleta?.config_key || sessionStorage.getItem('config_key');
+    
+    console.log('🔍 Buscando indicadores para:', { baseId, configKey });
+    
+    if (!configKey) {
+      throw new Error('Config key não encontrada. Refaça a configuração.');
+    }
+    
     const headers = {
       'Content-Type': 'application/json',
-      'X-Config-Key': base
+      'X-Config-Key': configKey
     };
 
     const [saudeRes, pendentesRes] = await Promise.all([
       fetch(`${API_BASE_URL}/api/saude-servidor`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ config_key: base })
+        body: JSON.stringify({ config_key: configKey })
       }),
       fetch(`${API_BASE_URL}/api/clientes-pendentes`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ config_key: base })
+        body: JSON.stringify({ config_key: configKey })
       })
     ]);
 
     if (!saudeRes.ok) {
-      throw new Error(`Base ${base}: falha ao consultar saúde (${saudeRes.status})`);
+      throw new Error(`Base ${baseId}: falha ao consultar saúde (${saudeRes.status})`);
     }
 
     const saude = await saudeRes.json();
@@ -83,7 +110,7 @@ const Home = () => {
       atualizadoEm: new Date().toISOString(),
       erro: null
     };
-  }, []);
+  }, [basesDisponiveis]);
 
   const carregarIndicadores = useCallback(async () => {
     if (!baseSelecionada) {
@@ -109,11 +136,19 @@ const Home = () => {
   }, [baseSelecionada, buscarIndicadoresBase]);
 
   useEffect(() => {
+    console.log('🏠 Home.js montado');
+    console.log('🔐 Token:', localStorage.getItem('auth_token') ? 'Presente' : 'Ausente');
+    console.log('📍 configKey do Context:', configKey);
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
+    console.log('📦 useEffect: carregando bases...');
     carregarBases();
   }, [carregarBases]);
 
   useEffect(() => {
+    console.log('🎯 basesSelecionada mudou para:', baseSelecionada);
     setLoading(true);
     carregarIndicadores();
 
@@ -151,22 +186,61 @@ const Home = () => {
 
   const selecionarBase = (base) => {
     setBaseSelecionada(base);
+    const baseObj = basesDisponiveis.find((item) => (typeof item === 'string' ? item : item.id) === base);
+    if (baseObj && typeof baseObj !== 'string') {
+      apiService.salvarBaseAtiva(baseObj);
+    }
     setComboAberto(false);
     setFiltroBase('');
   };
 
   const limparSelecaoBase = () => {
     setBaseSelecionada('');
+    apiService.salvarBaseAtiva(null);
     setComboAberto(false);
     setFiltroBase('');
   };
 
   if (loading && !indicadoresBaseAtual) {
-    return <div style={msgStyle}>Consultando telemetria...</div>;
+    return <div style={msgStyle}>⏳ Consultando telemetria...</div>;
   }
 
-  if (erro) {
-    return <div style={{ ...msgStyle, color: '#dc3545' }}>⚠️ {erro}</div>;
+  if (erro && basesDisponiveis.length === 0) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <h2 style={{ color: '#1a1f36' }}>Dashboard de Saúde das Bases</h2>
+        <div style={{ 
+          ...msgStyle, 
+          color: '#dc3545',
+          backgroundColor: '#f8d7da',
+          border: '1px solid #f5c6cb',
+          borderRadius: '8px',
+          marginTop: '20px'
+        }}>
+          <strong>⚠️ {erro}</strong>
+          <p style={{ marginTop: '15px' }}>Configure seu banco de dados clicando em <strong>⚙️ Configuração</strong> no menu.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (basesDisponiveis.length === 0) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <h2 style={{ color: '#1a1f36' }}>Dashboard de Saúde das Bases</h2>
+        <div style={{ 
+          ...msgStyle, 
+          color: '#17a2b8',
+          backgroundColor: '#d1ecf1',
+          border: '1px solid #bee5eb',
+          borderRadius: '8px',
+          marginTop: '20px'
+        }}>
+          <strong>ℹ️ Nenhuma base configurada</strong>
+          <p style={{ marginTop: '15px' }}>Acesse <strong>⚙️ Configuração</strong> para ler o arquivo Advice.xml e configurar seus bancos de dados.</p>
+        </div>
+      </div>
+    );
   }
 
   return (

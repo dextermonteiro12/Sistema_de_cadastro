@@ -2,7 +2,7 @@
 Rotas para gerenciar configuração de banco de dados
 """
 
-from fastapi import APIRouter, HTTPException, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocketDisconnect, Request, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import logging
@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 import re
 from database import db_manager, validar_conexao, check_db_health
+from routes.auth import verify_jwt_token, AuthDB
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,40 @@ def _sanitize_session_id(session_id: str | None) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "", raw)[:64] or "default"
 
 
+def _get_user_id_from_request(request: Request) -> Optional[str]:
+    """
+    Extrai user_id do JWT token no header Authorization.
+    Retorna None se token ausente ou inválido.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    
+    token = auth_header.replace("Bearer ", "").strip()
+    payload = verify_jwt_token(token)
+    return payload.get("user_id") if payload else None
+
+
+def _validate_user_owns_config(user_id: str, config_key: str) -> bool:
+    """
+    Valida se config_key pertence ao usuário.
+    """
+    try:
+        user_config = AuthDB.get_user_config(user_id)
+        if not user_config:
+            return False
+        
+        bases = user_config.get("bases", [])
+        for base in bases:
+            if base.get("config_key") == config_key:
+                return True
+        
+        return False
+    except Exception as e:
+        logger.error(f"Erro ao validar config do usuário: {e}")
+        return False
+
+
 def _extract_bases_from_xml(xml_path: Path) -> list[dict]:
     try:
         logger.info(f"Parsing XML: {xml_path}")
@@ -119,25 +154,41 @@ def _extract_bases_from_xml(xml_path: Path) -> list[dict]:
         return None
 
     for sistema in ["CORP", "EGUARDIAN"]:
-        logger.info(f"Procurando sistema: {sistema}")
+        logger.info(f"========== Procurando sistema: {sistema} ==========")
         sistema_node = find_sistema_node(sistema)
         if sistema_node is None:
-            logger.warning(f"Sistema {sistema} não encontrado no XML")
+            logger.warning(f"❌ Sistema {sistema} NÃO encontrado no XML")
+            logger.info(f"Tags disponíveis na raiz: {[local_name(child.tag) for child in list(root)]}")
             continue
 
-        logger.info(f"Sistema {sistema} encontrado")
+        logger.info(f"✅ Sistema {sistema} encontrado! Tag: {sistema_node.tag}")
+        logger.info(f"Filhos diretos de {sistema}: {[local_name(child.tag) for child in list(sistema_node)]}")
+        
         empresa_root = find_child(sistema_node, "EMPRESA")
         if empresa_root is None:
-            logger.warning(f"Nó EMPRESA não encontrado para {sistema}")
+            logger.warning(f"❌ Nó EMPRESA não encontrado para {sistema}")
+            logger.info(f"Tags disponíveis em {sistema}: {[local_name(child.tag) for child in list(sistema_node)]}")
             continue
 
-        logger.info(f"Nó EMPRESA encontrado para {sistema}")
-        for empresa_node in list(empresa_root):
+        logger.info(f"✅ Nó EMPRESA encontrado para {sistema}")
+        empresas_list = list(empresa_root)
+        logger.info(f"Total de empresas em {sistema}: {len(empresas_list)}")
+        logger.info(f"Empresas: {[local_name(emp.tag) for emp in empresas_list]}")
+        
+        for idx, empresa_node in enumerate(empresas_list):
+            empresa_nome = local_name(empresa_node.tag).strip()
+            logger.info(f"--- Processando empresa [{idx+1}/{len(empresas_list)}]: {empresa_nome} ---")
+            
+            filhos_empresa = [local_name(child.tag) for child in list(empresa_node)]
+            logger.info(f"Filhos de {empresa_nome}: {filhos_empresa}")
+            
             banco_node = find_child(empresa_node, "BANCO_DADOS")
             if banco_node is None:
-                logger.debug(f"BANCO_DADOS não encontrado em {local_name(empresa_node.tag)}")
+                logger.warning(f"❌ BANCO_DADOS não encontrado em {sistema}/{empresa_nome}")
                 continue
 
+            logger.info(f"✅ BANCO_DADOS encontrado em {sistema}/{empresa_nome}")
+            
             servidor = find_text(banco_node, "NOME_SERVIDOR")
             banco = find_text(banco_node, "NOME_BD")
             usuario = find_text(banco_node, "USUARIO")
@@ -145,8 +196,10 @@ def _extract_bases_from_xml(xml_path: Path) -> list[dict]:
             timeout = find_text(banco_node, "TIME_OUT")
             empresa = local_name(empresa_node.tag).strip()
 
+            logger.info(f"Extraído - Servidor: '{servidor}' | Banco: '{banco}' | Usuario: '{usuario}'")
+
             if not banco:
-                logger.warning(f"Banco não encontrado para {sistema}/{empresa}")
+                logger.warning(f"❌ NOME_BD vazio para {sistema}/{empresa} - BASE IGNORADA")
                 continue
 
             config_item = {
@@ -161,7 +214,7 @@ def _extract_bases_from_xml(xml_path: Path) -> list[dict]:
                 "label": f"{sistema} | {empresa} | {banco}"
             }
             configuracoes.append(config_item)
-            logger.info(f"Base encontrada: {config_item['label']}")
+            logger.info(f"✅ Base adicionada: {config_item['label']}")
 
     logger.info(f"Total de bases encontradas: {len(configuracoes)}")
     return configuracoes
@@ -283,10 +336,21 @@ async def listar_bases_pasta(request: ListarBasesPastaRequest):
         raise HTTPException(status_code=500, detail=f"Erro inesperado: {str(e)}")
 
 @router.get("/status/{config_key}")
-async def status_configuracao(config_key: str):
+async def status_configuracao(request: Request, config_key: str):
     """
-    Obtém status de uma configuração ativa
+    Obtém status de uma configuração ativa.
+    Requer autenticação e autorização.
     """
+    # Validar autenticação
+    user_id = _get_user_id_from_request(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    
+    # Validar autorização
+    if not _validate_user_owns_config(user_id, config_key):
+        logger.warning(f"Usuário {user_id} tentou acessar status de config_key {config_key} sem autorização")
+        raise HTTPException(status_code=403, detail="Você não tem permissão para acessar esta configuração")
+    
     engine = db_manager.obter_engine(config_key)
     
     if engine is None:
@@ -306,22 +370,64 @@ async def status_configuracao(config_key: str):
     }
 
 @router.get("/listar")
-async def listar_configuracoes():
+async def listar_configuracoes(request: Request):
     """
-    Lista todas as configurações ativas
+    Lista todas as configurações do usuário autenticado.
+    Requer autenticação.
     """
-    engines = db_manager.listar_engines()
+    # Validar autenticação
+    user_id = _get_user_id_from_request(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Não autenticado")
     
-    return {
-        "total": len(engines),
-        "configuracoes": engines
-    }
+    # Buscar configurações do usuário
+    try:
+        user_config = AuthDB.get_user_config(user_id)
+        if not user_config:
+            return {"total": 0, "configuracoes": []}
+        
+        bases = user_config.get("bases", [])
+        
+        # Filtrar apenas config_keys ativos no db_manager
+        engines_ativos = db_manager.listar_engines()
+        config_keys_ativos = set(engines_ativos)
+        
+        # Retornar apenas bases do usuário que estão ativas
+        configuracoes_usuario = [
+            {
+                "config_key": base.get("config_key"),
+                "nome": base.get("nome"),
+                "servidor": base.get("servidor"),
+                "banco": base.get("banco"),
+                "status": "ativo" if base.get("config_key") in config_keys_ativos else "inativo"
+            }
+            for base in bases
+        ]
+        
+        return {
+            "total": len(configuracoes_usuario),
+            "configuracoes": configuracoes_usuario
+        }
+    except Exception as e:
+        logger.error(f"Erro ao listar configurações: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao listar configurações")
 
 @router.post("/fechar/{config_key}")
-async def fechar_configuracao(config_key: str):
+async def fechar_configuracao(request: Request, config_key: str):
     """
-    Fecha uma configuração específica
+    Fecha uma configuração específica.
+    Requer autenticação e autorização.
     """
+    # Validar autenticação
+    user_id = _get_user_id_from_request(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    
+    # Validar autorização
+    if not _validate_user_owns_config(user_id, config_key):
+        logger.warning(f"Usuário {user_id} tentou fechar config_key {config_key} sem autorização")
+        raise HTTPException(status_code=403, detail="Você não tem permissão para fechar esta configuração")
+    
     db_manager.fechar_engine(config_key)
     
     return {

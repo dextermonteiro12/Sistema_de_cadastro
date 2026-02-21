@@ -1,5 +1,6 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { ConfigContext } from '../context/ConfigContext';
+import { apiService } from '../services/apiService';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -89,8 +90,13 @@ export default function Clientes() {
   };
 
   const handleGerar = async () => {
+    const baseAtiva = apiService.carregarBaseAtiva();
     if (!configKey) {
       alert("Configuracao nao ativa. Acesse Configuracao primeiro.");
+      return;
+    }
+    if (!baseAtiva?.banco) {
+      alert("Base ativa não selecionada. Volte em Configuração/Home e selecione uma base.");
       return;
     }
 

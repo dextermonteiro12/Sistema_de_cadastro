@@ -5,7 +5,17 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm --prefix frontend-app start",
+    "start:frontend": "npm --prefix frontend-app start",
+    "start:all": "powershell -ExecutionPolicy Bypass -File ./scripts/start-all.ps1",
+    "stop:all": "powershell -ExecutionPolicy Bypass -File ./scripts/stop-all.ps1",
+    "restart:all": "powershell -ExecutionPolicy Bypass -File ./scripts/restart-all.ps1",
+    "backend:start": "powershell -ExecutionPolicy Bypass -File ./scripts/backend-start.ps1",
+    "backend:test": "powershell -ExecutionPolicy Bypass -File ./scripts/backend-test.ps1",
+    "worker:start": "powershell -ExecutionPolicy Bypass -File ./scripts/worker-start.ps1",
+    "worker:test": "powershell -ExecutionPolicy Bypass -File ./scripts/worker-test.ps1",
+    "test": "npm run backend:test",
+    "test:all": "npm run backend:test && npm run worker:test"
   },
   "repository": {
     "type": "git",

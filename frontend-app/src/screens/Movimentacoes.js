@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import GeneratorForm from '../components/GeneratorForm'; 
+import { apiService } from '../services/apiService';
 
 const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' };
 const inputStyle = { padding: '12px', borderRadius: '6px', border: '1px solid #ddd', width: '100%', fontSize: '15px', boxSizing: 'border-box' };
@@ -17,10 +18,15 @@ export default function Movimentacoes() {
 
   // AJUSTE: Agora recebe 'qtd' que vem do GeneratorForm
   const handleGerarCarga = async (qtd) => {
-    const configRaw = sessionStorage.getItem('pld_sql_config');
-    if (!configRaw) return alert("⚠️ Configure o Ambiente SQL primeiro!");
-    
-    const configSql = JSON.parse(configRaw);
+    const configSql = apiService.carregarSqlConfig();
+    const baseAtiva = apiService.carregarBaseAtiva();
+    if (!configSql || !baseAtiva?.banco) return alert("⚠️ Configure o Ambiente SQL e selecione a base primeiro!");
+
+    const payloadConfig = {
+      ...configSql,
+      banco: baseAtiva.banco
+    };
+
     setLoading(true);
 
     try {
@@ -28,7 +34,7 @@ export default function Movimentacoes() {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          config: configSql, 
+          config: payloadConfig,
           tipo: tipoAtivo,
           quantidade: qtd,          // <--- ENVIANDO A QUANTIDADE PARA O BACKEND
           data_referencia: dataReferencia,

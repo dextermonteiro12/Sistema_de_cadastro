@@ -60,10 +60,17 @@ class DynamicConnectionManager:
                 # URL-encodar o driver para evitar erros de sintaxe
                 encoded_driver = quote_plus(driver.replace('{', '').replace('}', ''))
                 
+                # Forçar TCP/IP para acesso remoto
+                # Se servidor não tem porta, adicionar ,1433 para forçar TCP/IP
+                servidor_com_porta = servidor
+                if ',' not in servidor and ':' not in servidor:
+                    # Adicionar porta padrão do SQL Server
+                    servidor_com_porta = f"{servidor},1433"
+                
                 # Construir URL de conexão
                 connection_url = (
                     f"mssql+pyodbc://{usuario}:{senha}@"
-                    f"{servidor}/{banco}"
+                    f"{servidor_com_porta}/{banco}"
                     f"?driver={encoded_driver}&TrustServerCertificate=yes"
                 )
                 
@@ -208,23 +215,37 @@ async def validar_conexao(
         # Remover chaves do driver se existirem
         encoded_driver = encoded_driver.replace("%7B", "").replace("%7D", "")
         
+        # Forçar TCP/IP para acesso remoto
+        servidor_com_porta = servidor
+        if ',' not in servidor and ':' not in servidor:
+            servidor_com_porta = f"{servidor},1433"
+        
+        logger.info(f"🔵 Tentando conectar ao SQL Server: {servidor_com_porta}")
+        logger.info(f"🔵 Banco: {banco}, Usuário: {usuario}")
+        
         # Criar engine temporário
         connection_url = (
             f"mssql+pyodbc://{usuario}:{senha}@"
-            f"{servidor}/{banco}"
+            f"{servidor_com_porta}/{banco}"
             f"?driver={encoded_driver}&TrustServerCertificate=yes"
         )
         
+        # Timeout aumentado para 15 segundos
         temp_engine = create_engine(
             connection_url,
             connect_args={
-                'timeout': 10,
-                'TrustServerCertificate': 'yes'
+                'timeout': 15,
+                'TrustServerCertificate': 'yes',
+                'ConnectTimeout': 15
             }
         )
         
+        logger.info(f"🔵 Engine criado, tentando estabelecer conexão...")
+        
         # Testar conexão
         with temp_engine.connect() as conn:
+            logger.info(f"✅ Conexão estabelecida com sucesso!")
+            
             # Verificar versão do sistema
             try:
                 result = conn.execute(
@@ -258,24 +279,43 @@ async def validar_conexao(
     except Exception as e:
         error_msg = str(e)
         
-        # Mensagens de erro mais claras
+        logger.error(f"❌ Erro ao conectar ao SQL Server {servidor_com_porta}: {error_msg}")
+        
+        # Mensagens de erro mais claras com diagnósticos
         if "login failed" in error_msg.lower():
-            erro = "Usuário ou senha incorretos"
+            erro = "❌ Usuário ou senha incorretos"
+            dica = "Verifique as credenciais no SQL Server Management Studio"
         elif "cannot open database" in error_msg.lower():
-            erro = "Banco de dados não encontrado"
-        elif "connection timeout" in error_msg.lower():
-            erro = "Timeout - Servidor não responde"
-        elif "named instance not found" in error_msg.lower():
-            erro = "Instância SQL não encontrada"
+            erro = f"❌ Banco de dados '{banco}' não encontrado"
+            dica = "Verifique se o nome do banco está correto"
+        elif "timeout" in error_msg.lower() or "wait operation timed out" in error_msg.lower():
+            erro = f"❌ Timeout ao conectar em {servidor_com_porta}"
+            dica = (
+                f"O backend não conseguiu alcançar o SQL Server.\n\n"
+                f"📋 Diagnóstico necessário:\n"
+                f"1. NO SERVIDOR BACKEND (onde este código roda), execute:\n"
+                f"   Test-NetConnection -ComputerName {servidor.split(',')[0]} -Port 1433\n\n"
+                f"2. Se a porta estiver fechada, configure NO SERVIDOR SQL:\n"
+                f"   - Habilitar TCP/IP no SQL Server Configuration Manager\n"
+                f"   - Liberar porta 1433 no Firewall\n"
+                f"   - Reiniciar serviço SQL Server\n\n"
+                f"3. Use o script: .\\teste-conexao-sql.ps1"
+            )
+        elif "named instance not found" in error_msg.lower() or "named pipes" in error_msg.lower():
+            erro = "❌ SQL Server não está usando TCP/IP"
+            dica = "Habilite TCP/IP no SQL Server Configuration Manager e reinicie o serviço"
         else:
-            erro = error_msg
+            erro = f"❌ {error_msg}"
+            dica = "Verifique os logs do backend para mais detalhes"
         
         return {
             "status": "erro",
-            "mensagem": f"✗ Erro ao conectar: {erro}",
+            "mensagem": erro,
+            "dica": dica,
             "detalhes": {
-                "servidor": servidor,
+                "servidor_tentado": servidor_com_porta,
                 "banco": banco,
+                "usuario": usuario,
                 "erro_completo": error_msg
             }
         }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useConfig } from '../context/ConfigContext';
+import { apiService } from '../services/apiService';
 // Importação dos componentes modulares
 import TbPesquisasLog from '../dashboard/tb_pesquisas_log'; 
 import TbFilaADSVC from '../dashboard/tb_fila_adsvc'; 
@@ -7,6 +8,7 @@ import TbPerformanceWorkers from '../dashboard/tb_performance_workers';
 
 export default function Monitoramento() {
   const { ambiente } = useConfig();
+  const baseAtiva = apiService.carregarBaseAtiva();
 
   return (
     <div style={containerStyle}>
@@ -15,6 +17,9 @@ export default function Monitoramento() {
       </h2>
       <div style={contextStyle}>
         Ambiente ativo: <strong>{ambiente || '-'}</strong> | Sessão: <strong>{sessionStorage.getItem('pld_session_id') || '-'}</strong>
+      </div>
+      <div style={contextStyle}>
+        Base ativa: <strong>{baseAtiva?.label || baseAtiva?.banco || '-'}</strong>
       </div>
       
       {/* 1. Grid superior para Cards de Resumo (KPIs) */}

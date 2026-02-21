@@ -11,6 +11,7 @@ import CargaCoTit from './screens/Cargacotit';
 import Login from './screens/Login';
 
 import { ConfigProvider, useConfig } from './context/ConfigContext';
+import { apiService } from './services/apiService';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -59,6 +60,21 @@ const btnLogout = {
 function NavBar() {
   const navigate = useNavigate();
   const { config, status } = useConfig();
+  const [baseAtivaLabel, setBaseAtivaLabel] = useState('-');
+
+  useEffect(() => {
+    const atualizarBaseAtiva = () => {
+      const baseAtiva = apiService.carregarBaseAtiva();
+      setBaseAtivaLabel(baseAtiva?.label || baseAtiva?.banco || '-');
+    };
+
+    atualizarBaseAtiva();
+    window.addEventListener('pld-base-ativa-updated', atualizarBaseAtiva);
+
+    return () => {
+      window.removeEventListener('pld-base-ativa-updated', atualizarBaseAtiva);
+    };
+  }, []);
 
   const handleLogout = async () => {
     const token = localStorage.getItem('auth_token');
@@ -100,6 +116,9 @@ function NavBar() {
           ) : (
             <span>✗ Sem conexão</span>
           )}
+        </div>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>
+          Base ativa: <strong style={{ color: '#fff' }}>{baseAtivaLabel}</strong>
         </div>
         <button onClick={handleLogout} style={btnLogout}>
           Sair

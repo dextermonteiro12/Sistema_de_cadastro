@@ -133,6 +133,16 @@ class ApiService {
       });
 
       const data = await response.json();
+      
+      console.log('🔵 [API] Resposta bruta do backend:', data);
+      console.log('🔵 [API] data.bases:', data.bases);
+      console.log('🔵 [API] Tipo de data.bases:', Array.isArray(data.bases) ? 'Array' : typeof data.bases);
+      if (Array.isArray(data.bases)) {
+        console.log('🔵 [API] Total de bases no array:', data.bases.length);
+        data.bases.forEach((base, idx) => {
+          console.log(`🔵 [API] Base ${idx}:`, base);
+        });
+      }
 
       if (!response.ok) {
         return {
@@ -353,6 +363,64 @@ class ApiService {
   }
 
   /**
+   * Salva base ativa selecionada na sessão
+   * @param {Object|null} base
+   */
+  salvarBaseAtiva(base) {
+    if (!base) {
+      sessionStorage.removeItem('pld_base_ativa');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('pld-base-ativa-updated'));
+      }
+      return;
+    }
+    sessionStorage.setItem('pld_base_ativa', JSON.stringify(base));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('pld-base-ativa-updated'));
+    }
+  }
+
+  /**
+   * Recupera base ativa da sessão
+   * @returns {Object|null}
+   */
+  carregarBaseAtiva() {
+    const raw = sessionStorage.getItem('pld_base_ativa');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Salva configuração SQL ativa para módulos legados
+   * @param {Object|null} config
+   */
+  salvarSqlConfig(config) {
+    if (!config) {
+      sessionStorage.removeItem('pld_sql_config');
+      return;
+    }
+    sessionStorage.setItem('pld_sql_config', JSON.stringify(config));
+  }
+
+  /**
+   * Recupera configuração SQL ativa
+   * @returns {Object|null}
+   */
+  carregarSqlConfig() {
+    const raw = sessionStorage.getItem('pld_sql_config');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Limpa configuração
    */
   limpar() {
@@ -362,6 +430,8 @@ class ApiService {
     sessionStorage.removeItem('config_key');
     sessionStorage.removeItem('pld_config');
     sessionStorage.removeItem('pld_ambiente');
+    sessionStorage.removeItem('pld_base_ativa');
+    sessionStorage.removeItem('pld_sql_config');
   }
 }
 

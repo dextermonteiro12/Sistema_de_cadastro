@@ -1,33 +1,72 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConfig } from '../context/ConfigContext';
 import { apiService } from '../services/apiService';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function Configuracao() {
   const navigate = useNavigate();
-  const { configKey, config } = useConfig();
+  const { validarConfig } = useConfig();
 
   const [step, setStep] = useState(1); // 1: XML, 2: SQL, 3: Validar, 4: Sucesso
-  const [folderPath, setFolderPath] = useState('');
+  const folderPathRef = useRef('');
+  const basesDaPastaRef = useRef([]);
+  const baseSelecionadaIdRef = useRef('');
+  const servidorRef = useRef('');
+  const usuarioRef = useRef('');
+  const senhaRef = useRef('');
+  
   const [basesDaPasta, setBasesDaPasta] = useState([]);
   const [baseSelecionadaId, setBaseSelecionadaId] = useState('');
   const [carregandoXml, setCarregandoXml] = useState(false);
   const [erroXml, setErroXml] = useState(null);
   const [mensagemXml, setMensagemXml] = useState(null);
 
-  const [formData, setFormData] = useState({
-    servidor: '',
-    banco: '',
-    usuario: '',
-    senha: ''
-  });
-
   const [testando, setTestando] = useState(false);
   const [statusTeste, setStatusTeste] = useState(null);
   const [basesSalvas, setBasesSalvas] = useState(null);
 
+  // 🔍 Debug: monitorar mudanças no estado basesDaPasta
+  useEffect(() => {
+    console.log('🔵 [ESTADO] basesDaPasta mudou:', basesDaPasta);
+    console.log('🔵 [ESTADO] Total de bases no estado:', basesDaPasta.length);
+    console.log('🔵 [ESTADO] Ref tem:', basesDaPastaRef.current.length, 'bases');
+    
+    // 🔧 FALLBACK: Se estado ficar vazio mas ref tem dados, restaurar
+    if (basesDaPasta.length === 0 && basesDaPastaRef.current.length > 0) {
+      console.log('⚠️ [ESTADO] Estado vazio mas ref tem dados! Restaurando...');
+      setBasesDaPasta([...basesDaPastaRef.current]);
+      return;
+    }
+    
+    basesDaPasta.forEach((base, idx) => {
+      console.log(`🔵 [ESTADO] Base ${idx}:`, base);
+    });
+  }, [basesDaPasta]);
+
+  const getBaseSelecionada = () => {
+    const lista = basesDaPasta.length > 0 ? basesDaPasta : basesDaPastaRef.current;
+    return lista.find((base) => base.id === baseSelecionadaId) || null;
+  };
+
+  const handleSelecionarBase = (id) => {
+    console.log('🔵 Selecionando base:', id);
+    setBaseSelecionadaId(id);
+    baseSelecionadaIdRef.current = id;
+    
+    // Usar fallback para encontrar a base
+    const lista = basesDaPasta.length > 0 ? basesDaPasta : basesDaPastaRef.current;
+    const base = lista.find((item) => item.id === id) || null;
+    
+    console.log('🔵 Base encontrada:', base);
+    apiService.salvarBaseAtiva(base);
+  };
+
   // ===== STEP 1: Ler XML =====
   const handleCarregarXml = async () => {
+    const folderPath = folderPathRef.current;
+    
     if (!folderPath.trim()) {
       setErroXml('Informe o caminho do arquivo ou pasta');
       return;
@@ -40,6 +79,8 @@ export default function Configuracao() {
     try {
       const resultado = await apiService.listarBasesDaPasta(folderPath.trim());
 
+      console.log('🔵 [XML] Resposta backend completa:', resultado);
+
       if (resultado.status !== 'ok') {
         setErroXml(resultado.mensagem || 'Erro ao ler arquivo');
         setCarregandoXml(false);
@@ -47,34 +88,72 @@ export default function Configuracao() {
       }
 
       const lista = Array.isArray(resultado.bases) ? resultado.bases : [];
+      console.log('🔵 [XML] Lista de bases recebidas:', lista);
+      console.log('🔵 [XML] Total recebido:', lista.length);
+
       const normalizadas = lista.map((item, idx) => {
+        console.log(`🔵 [XML] Processando item ${idx + 1}:`, item);
+        
         if (typeof item === 'string') {
-          return {
+          const normalizado = {
             id: `base-${idx}`,
             sistema: 'N/A',
             banco: item,
             label: item
           };
+          console.log(`  ✅ String normalizada:`, normalizado);
+          return normalizado;
         }
-        return {
+        
+        const normalizado = {
           id: item.id || `base-${idx}`,
           sistema: item.sistema || 'N/A',
           banco: item.banco || '',
           label: item.label || `${item.sistema} | ${item.banco}`
         };
-      }).filter(item => item.banco);
+        console.log(`  ✅ Objeto normalizado:`, normalizado);
+        console.log(`  Campo 'banco': '${normalizado.banco}' (truthy: ${!!normalizado.banco})`);
+        return normalizado;
+      });
 
-      if (normalizadas.length === 0) {
+      console.log('🔵 [XML] Bases antes do filter:', normalizadas);
+      
+      const basesComBanco = normalizadas.filter(item => {
+        const temBanco = !!item.banco;
+        if (!temBanco) {
+          console.log(`  ⚠️ Base FILTRADA (sem banco):`, item);
+        }
+        return temBanco;
+      });
+
+      console.log('🔵 [XML] Bases após filter:', basesComBanco);
+      console.log('🔵 [XML] Total após filter:', basesComBanco.length);
+
+      if (basesComBanco.length === 0) {
         setErroXml('Nenhuma base encontrada no arquivo');
         setCarregandoXml(false);
         return;
       }
 
-      setBasesDaPasta(normalizadas);
-      setBaseSelecionadaId(normalizadas[0].id);
-      setMensagemXml(`✅ ${normalizadas.length} base(s) encontrada(s)!`);
+      console.log('🔵 [XML] Atualizando estado com bases:', basesComBanco);
+      
+      // Salvar no ref ANTES do estado para garantir persistência
+      basesDaPastaRef.current = basesComBanco;
+      baseSelecionadaIdRef.current = basesComBanco[0].id;
+      
+      // Usar callback form para garantir atualização
+      setBasesDaPasta(() => {
+        console.log('🔵 [XML] setState callback executado com:', basesComBanco);
+        return basesComBanco;
+      });
+      
+      setBaseSelecionadaId(basesComBanco[0].id);
+      apiService.salvarBaseAtiva(basesComBanco[0]);
+      setMensagemXml(`✅ ${basesComBanco.length} base(s) encontrada(s)! Selecione uma base e clique em "Próximo".`);
       setCarregandoXml(false);
-      setStep(2); // Próximo step
+      
+      // NÃO mudar de step automaticamente - deixar usuário ver e selecionar as bases
+      console.log('🔵 [XML] Carregamento concluído. Aguardando seleção do usuário.');
     } catch (err) {
       setErroXml('Erro ao conectar com servidor');
       setCarregandoXml(false);
@@ -82,13 +161,8 @@ export default function Configuracao() {
   };
 
   // ===== STEP 2: Preencher SQL =====
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
   const handleProximoStep = () => {
-    if (!formData.servidor || !formData.usuario || !formData.senha) {
+    if (!servidorRef.current.trim() || !usuarioRef.current.trim() || !senhaRef.current.trim()) {
       setStatusTeste({ tipo: 'erro', msg: 'Preencha todos os campos' });
       return;
     }
@@ -101,40 +175,104 @@ export default function Configuracao() {
     setStatusTeste(null);
 
     try {
-      const resultado = await apiService.testarConexao({
-        servidor: formData.servidor,
-        banco: formData.banco,
-        usuario: formData.usuario,
-        senha: formData.senha
+      const baseSelecionada = getBaseSelecionada();
+      const bancoSelecionado = baseSelecionada?.banco || '';
+      
+      const response = await fetch(`${API_BASE_URL}/config/teste`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config: {
+            servidor: servidorRef.current,
+            banco: bancoSelecionado,
+            usuario: usuarioRef.current,
+            senha: senhaRef.current
+          }
+        })
       });
+
+      const resultado = await response.json();
 
       if (resultado.status === 'ok' || resultado.status === 'sucesso') {
         setStatusTeste({ tipo: 'sucesso', msg: 'Conexão bem-sucedida!' });
-        setTestando(false);
-        // Próximo ao validar
       } else {
-        setStatusTeste({ tipo: 'erro', msg: resultado.mensagem || 'Falha na conexão' });
-        setTestando(false);
+        // Erro do backend (status 500 mas resposta JSON)
+        setStatusTeste({ 
+          tipo: 'erro', 
+          msg: resultado.mensagem || resultado.erro || 'Falha ao conectar ao servidor' 
+        });
       }
+      setTestando(false);
     } catch (err) {
-      setStatusTeste({ tipo: 'erro', msg: 'Erro ao testar conexão' });
+      console.error('Erro ao testar conexão:', err);
+      setStatusTeste({ tipo: 'erro', msg: `Erro na requisição: ${err.message}` });
       setTestando(false);
     }
   };
 
   const handleValidarEAtivar = async () => {
     setTestando(true);
+    setStatusTeste(null);
 
     try {
-      const basesSelecionadas = basesDaPasta.filter(b => b.id === baseSelecionadaId);
+      const baseSelecionada = getBaseSelecionada();
+      if (!baseSelecionada) {
+        setStatusTeste({ tipo: 'erro', msg: 'Selecione uma base antes de validar.' });
+        return;
+      }
+
+      const configAtiva = {
+        servidor: servidorRef.current,
+        banco: baseSelecionada.banco,
+        usuario: usuarioRef.current,
+        senha: senhaRef.current
+      };
+
+      const ativacao = await validarConfig(configAtiva, {
+        ambiente: baseSelecionada.label || baseSelecionada.banco
+      });
+
+      if (!ativacao?.sucesso) {
+        setStatusTeste({ tipo: 'erro', msg: ativacao?.erro || 'Falha ao ativar configuração.' });
+        return;
+      }
+
+      // ✅ Capturar config_key da validação e associar à base
+      const configKey = ativacao.config_key;
+      console.log('🔑 Config key obtida:', configKey);
       
-      const resultado = await apiService.salvarConfiguracao({
-        xml_path: folderPath,
-        sql_server: formData.servidor,
-        sql_username: formData.usuario,
-        sql_password: formData.senha,
+      const baseComConfigKey = {
+        ...baseSelecionada,
+        config_key: configKey
+      };
+
+      apiService.salvarBaseAtiva(baseComConfigKey);
+      apiService.salvarSqlConfig({
+        ...configAtiva,
+        sistema: baseSelecionada.sistema,
+        label: baseSelecionada.label,
+        versao: null,
+        config_key: configKey
+      });
+
+      const basesSelecionadas = [baseComConfigKey];
+      
+      console.log('🔵 Salvando configuração:', {
+        xml_path: folderPathRef.current,
+        sql_server: servidorRef.current,
+        sql_username: usuarioRef.current,
         bases: basesSelecionadas
       });
+      
+      const resultado = await apiService.salvarConfiguracao({
+        xml_path: folderPathRef.current,
+        sql_server: servidorRef.current,
+        sql_username: usuarioRef.current,
+        sql_password: senhaRef.current,
+        bases: basesSelecionadas
+      });
+
+      console.log('🟢 Resposta do backend:', resultado);
 
       if (resultado.status === 'ok') {
         setBasesSalvas(resultado.data);
@@ -143,6 +281,7 @@ export default function Configuracao() {
         setStatusTeste({ tipo: 'erro', msg: resultado.mensagem });
       }
     } catch (err) {
+      console.error('🔴 Erro ao salvar:', err);
       setStatusTeste({ tipo: 'erro', msg: 'Erro ao salvar configuração' });
     } finally {
       setTestando(false);
@@ -176,10 +315,13 @@ export default function Configuracao() {
         <input
           type="text"
           placeholder="Ex: C:\Advice ou C:\Advice\config\Advice.xml"
-          value={folderPath}
-          onChange={(e) => setFolderPath(e.target.value)}
+          defaultValue=""
+          onChange={(e) => {
+            folderPathRef.current = e.target.value;
+          }}
           disabled={carregandoXml}
           style={inputStyle}
+          autoComplete="off"
         />
       </div>
 
@@ -195,39 +337,64 @@ export default function Configuracao() {
         </div>
       )}
 
-      {basesDaPasta.length > 0 && (
-        <div style={previewStyle}>
-          <h3 style={{ color: '#1f2937', margin: '0 0 12px 0', fontSize: '14px' }}>
-            📊 Bases Encontradas
-          </h3>
-          <div style={basesListStyle}>
-            {basesDaPasta.map(base => (
-              <div
-                key={base.id}
-                style={{
-                  ...baseItemStyle,
-                  backgroundColor: baseSelecionadaId === base.id ? '#dbeafe' : '#f9fafb',
-                  borderColor: baseSelecionadaId === base.id ? '#0084ff' : '#e5e7eb'
-                }}
-                onClick={() => setBaseSelecionadaId(base.id)}
-                role="button"
-              >
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  <strong>{base.sistema}</strong> | {base.banco}
-                </div>
-              </div>
-            ))}
+      {(() => {
+        // Usar ref como fallback se estado estiver vazio
+        const basesParaExibir = basesDaPasta.length > 0 ? basesDaPasta : basesDaPastaRef.current;
+        console.log('🔵 [RENDER] Bases para exibir:', basesParaExibir);
+        
+        if (basesParaExibir.length === 0) return null;
+        
+        return (
+          <div style={previewStyle}>
+            <h3 style={{ color: '#1f2937', margin: '0 0 12px 0', fontSize: '14px' }}>
+              📊 Bases Encontradas ({basesParaExibir.length})
+            </h3>
+            <div style={basesListStyle}>
+              {basesParaExibir.map((base, idx) => {
+                console.log(`🔵 [RENDER] Renderizando base ${idx}:`, base);
+                return (
+                  <div
+                    key={base.id}
+                    style={{
+                      ...baseItemStyle,
+                      backgroundColor: baseSelecionadaId === base.id ? '#dbeafe' : '#f9fafb',
+                      borderColor: baseSelecionadaId === base.id ? '#0084ff' : '#e5e7eb'
+                    }}
+                    onClick={() => handleSelecionarBase(base.id)}
+                    role="button"
+                  >
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      <strong>{base.sistema}</strong> | {base.banco}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      <button
-        onClick={handleCarregarXml}
-        disabled={carregandoXml}
-        style={buttonPrimaryStyle}
-      >
-        {carregandoXml ? '⏳ Lendo...' : '📂 Ler Arquivo'}
-      </button>
+      <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+        <button
+          onClick={handleCarregarXml}
+          disabled={carregandoXml}
+          style={buttonPrimaryStyle}
+        >
+          {carregandoXml ? '⏳ Lendo...' : '📂 Ler Arquivo'}
+        </button>
+        
+        {(basesDaPasta.length > 0 || basesDaPastaRef.current.length > 0) && (
+          <button
+            onClick={() => {
+              console.log('🔵 Avançando para Step 2');
+              setStep(2);
+            }}
+            style={{...buttonPrimaryStyle, backgroundColor: '#10b981'}}
+          >
+            ➡️ Próximo
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -243,10 +410,10 @@ export default function Configuracao() {
         <input
           type="text"
           placeholder="Ex: localhost\SQLEXPRESS ou 192.168.1.1"
-          name="servidor"
-          value={formData.servidor}
-          onChange={handleChange}
+          defaultValue={servidorRef.current}
+          onChange={(e) => servidorRef.current = e.target.value}
           style={inputStyle}
+          autoComplete="off"
         />
         <div style={helperStyle}>IP ou nome do servidor SQL</div>
       </div>
@@ -256,10 +423,10 @@ export default function Configuracao() {
         <input
           type="text"
           placeholder="Ex: sa ou seu_usuario"
-          name="usuario"
-          value={formData.usuario}
-          onChange={handleChange}
+          defaultValue={usuarioRef.current}
+          onChange={(e) => usuarioRef.current = e.target.value}
           style={inputStyle}
+          autoComplete="off"
         />
         <div style={helperStyle}>Usuário para autenticação</div>
       </div>
@@ -269,10 +436,10 @@ export default function Configuracao() {
         <input
           type="password"
           placeholder="••••••••"
-          name="senha"
-          value={formData.senha}
-          onChange={handleChange}
+          defaultValue={senhaRef.current}
+          onChange={(e) => senhaRef.current = e.target.value}
           style={inputStyle}
+          autoComplete="off"
         />
         <div style={helperStyle}>Senha do usuário SQL</div>
       </div>
@@ -304,11 +471,11 @@ export default function Configuracao() {
       <div style={connectionInfoStyle}>
         <div style={infoRowStyle}>
           <span style={{ color: '#6b7280' }}>🖥️ Servidor:</span>
-          <span style={{ fontWeight: '600' }}>{formData.servidor}</span>
+          <span style={{ fontWeight: '600' }}>{servidorRef.current}</span>
         </div>
         <div style={infoRowStyle}>
           <span style={{ color: '#6b7280' }}>👤 Usuário:</span>
-          <span style={{ fontWeight: '600' }}>{formData.usuario}</span>
+          <span style={{ fontWeight: '600' }}>{usuarioRef.current}</span>
         </div>
         <div style={infoRowStyle}>
           <span style={{ color: '#6b7280' }}>📊 Base:</span>
@@ -324,7 +491,14 @@ export default function Configuracao() {
           backgroundColor: statusTeste.tipo === 'sucesso' ? '#efe' : '#fee',
           borderColor: statusTeste.tipo === 'sucesso' ? '#cfc' : '#fcc'
         }}>
-          {statusTeste.tipo === 'sucesso' ? '✅' : '❌'} {statusTeste.msg}
+          <div style={{ marginBottom: '8px' }}>
+            {statusTeste.tipo === 'sucesso' ? '✅' : '❌'} {statusTeste.msg}
+          </div>
+          {statusTeste.tipo === 'erro' && (
+            <div style={{ fontSize: '12px', color: '#7f1d1d', marginTop: '8px' }}>
+              💡 Dica: Verifique se o servidor está correto e as credenciais são válidas
+            </div>
+          )}
         </div>
       )}
 
@@ -386,7 +560,7 @@ export default function Configuracao() {
       )}
 
       <button
-        onClick={() => navigate('/home')}
+        onClick={() => navigate('/')}
         style={{ ...buttonPrimaryStyle, marginTop: '30px', width: '100%' }}
       >
         ✨ Ir para Dashboard
