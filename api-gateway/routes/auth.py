@@ -14,7 +14,7 @@ from auth_database import AuthDB
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
 # ===== CONFIGURAÇÃO JWT =====
 
@@ -109,7 +109,7 @@ def get_user_from_token(authorization: str = Header(None)) -> Optional[dict]:
 
 # ===== ENDPOINTS =====
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=TokenResponse, summary="Registrar novo usuário")
 async def register(request: RegisterRequest):
     """
     Registra novo usuário e retorna token JWT
@@ -162,7 +162,7 @@ async def register(request: RegisterRequest):
         raise HTTPException(status_code=500, detail="Erro ao registrar usuário")
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, summary="Autenticar usuário")
 async def login(request: LoginRequest):
     """
     Autentica usuário e retorna token JWT
@@ -203,7 +203,7 @@ async def login(request: LoginRequest):
     )
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse, summary="Obter usuário autenticado")
 async def get_current_user(authorization: str = Header(None)):
     """
     Retorna dados do usuário autenticado
@@ -234,7 +234,7 @@ async def get_current_user(authorization: str = Header(None)):
     return UserResponse(**user)
 
 
-@router.post("/validate-token")
+@router.post("/validate-token", summary="Validar token JWT")
 async def validate_token(authorization: str = Header(None)):
     """
     Valida se token JWT é válido
@@ -255,7 +255,7 @@ async def validate_token(authorization: str = Header(None)):
     }
 
 
-@router.post("/logout")
+@router.post("/logout", summary="Efetuar logout")
 async def logout(authorization: str = Header(None)):
     """
     Logout do usuário (validação no frontend)

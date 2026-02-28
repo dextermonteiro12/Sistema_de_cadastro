@@ -1,5 +1,6 @@
 import os
 import grpc
+import json
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -10,7 +11,15 @@ import gerador_pb2_grpc
 GRPC_HOST = os.getenv("GRPC_HOST", "localhost")
 GRPC_PORT = os.getenv("GRPC_PORT", "50051")
 
-def gerar_clientes(config: dict, config_key: str, quantidade: int, qtd_pf: int = 0, qtd_pj: int = 0):
+def gerar_clientes(
+    config: dict,
+    config_key: str,
+    quantidade: int,
+    qtd_pf: int = 0,
+    qtd_pj: int = 0,
+    versao: str = "",
+    customizacao: dict | None = None
+):
     channel = grpc.insecure_channel(f"{GRPC_HOST}:{GRPC_PORT}")
     stub = gerador_pb2_grpc.DataGeneratorStub(channel)
     req = gerador_pb2.GenerateClientesRequest(
@@ -23,6 +32,8 @@ def gerar_clientes(config: dict, config_key: str, quantidade: int, qtd_pf: int =
         usuario=config.get("usuario", ""),
         senha=config.get("senha", ""),
         driver=config.get("driver", "ODBC Driver 17 for SQL Server"),
+        versao=versao or "",
+        customizacao_json=json.dumps(customizacao or {}, ensure_ascii=False),
     )
     return stub.GenerateClientes(req)
 

@@ -91,8 +91,14 @@ export default function Clientes() {
 
   const handleGerar = async () => {
     const baseAtiva = apiService.carregarBaseAtiva();
+    const sqlConfig = apiService.carregarSqlConfig();
+    const token = localStorage.getItem('auth_token');
     if (!configKey) {
       alert("Configuracao nao ativa. Acesse Configuracao primeiro.");
+      return;
+    }
+    if (!token) {
+      alert("Sessão expirada. Faça login novamente.");
       return;
     }
     if (!baseAtiva?.banco) {
@@ -107,12 +113,25 @@ export default function Clientes() {
     try {
       const res = await fetch(`${API_BASE_URL}/grpc/gerar_clientes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           config_key: configKey,
           quantidade: isCargaDividida ? (Number(qtdPf) + Number(qtdPj)) : Number(quantidade),
           qtd_pf: qtdPf !== "" ? Number(qtdPf) : 0,
-          qtd_pj: qtdPj !== "" ? Number(qtdPj) : 0
+          qtd_pj: qtdPj !== "" ? Number(qtdPj) : 0,
+          versao: sqlConfig?.versao || null,
+          customizacao: modoManual ? {
+            CD_TP_CLIENTE: custom.CD_TP_CLIENTE || null,
+            DE_CLIENTE: custom.DE_CLIENTE || null,
+            CIC_CPF: custom.CIC_CPF || null,
+            DT_DESATIVACAO: custom.DT_DESATIVACAO || null,
+            CD_RISCO_INERENTE: Number(custom.CD_RISCO_INERENTE || 0),
+            FL_GRANDES_FORTUNAS: Number(custom.FL_GRANDES_FORTUNAS || 0),
+            CD_NAT_JURIDICA: custom.CD_NAT_JURIDICA || null
+          } : {}
         })
       });
 
@@ -137,8 +156,6 @@ export default function Clientes() {
   return (
     <div style={{ padding: "30px", backgroundColor: "#f8f9fa", minHeight: "100vh" }}>
       <div style={containerStyle}>
-        <h2>Gerador de Cargas: Clientes PLD</h2>
-
         {!configKey && (
           <div style={{ backgroundColor: "#f8d7da", color: "#721c24", padding: "15px", borderRadius: "5px", marginBottom: "20px" }}>
             Configuracao inativa. Acesse a tela de Configuracao para conectar ao banco.

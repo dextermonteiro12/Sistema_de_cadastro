@@ -571,12 +571,6 @@ export default function Configuracao() {
   // ===== RENDER =====
   return (
     <div style={containerStyle}>
-      <div style={headerStyle}>
-        <h1 style={{ margin: 0, color: '#1f2937', fontSize: '24px' }}>
-          ⚙️ Configuração de Banco de Dados
-        </h1>
-      </div>
-
       <StepIndicator />
 
       <div style={contentStyle}>
@@ -595,12 +589,6 @@ const containerStyle = {
   minHeight: '100vh',
   backgroundColor: '#f3f4f6',
   padding: '20px'
-};
-
-const headerStyle = {
-  marginBottom: '30px',
-  paddingBottom: '20px',
-  borderBottom: '2px solid #e5e7eb'
 };
 
 const stepsContainerStyle = {

@@ -59,6 +59,8 @@ class DynamicConnectionManager:
             try:
                 # URL-encodar o driver para evitar erros de sintaxe
                 encoded_driver = quote_plus(driver.replace('{', '').replace('}', ''))
+                encoded_usuario = quote_plus(usuario)
+                encoded_senha = quote_plus(senha)
                 
                 # Forçar TCP/IP para acesso remoto
                 # Se servidor não tem porta, adicionar ,1433 para forçar TCP/IP
@@ -69,7 +71,7 @@ class DynamicConnectionManager:
                 
                 # Construir URL de conexão
                 connection_url = (
-                    f"mssql+pyodbc://{usuario}:{senha}@"
+                    f"mssql+pyodbc://{encoded_usuario}:{encoded_senha}@"
                     f"{servidor_com_porta}/{banco}"
                     f"?driver={encoded_driver}&TrustServerCertificate=yes"
                 )
@@ -84,9 +86,6 @@ class DynamicConnectionManager:
                     pool_pre_ping=True,
                     connect_args={
                         'timeout': 30,
-                        'isolation_level': 'READ COMMITTED',
-                        'TrustServerCertificate': 'yes',
-                        'ConnectTimeout': 300,
                     },
                     echo=False
                 )
@@ -212,6 +211,8 @@ async def validar_conexao(
     try:
         # URL-encodar o driver para evitar erros de sintaxe
         encoded_driver = quote_plus(driver.replace('{', '').replace('}', ''))
+        encoded_usuario = quote_plus(usuario)
+        encoded_senha = quote_plus(senha)
         # Remover chaves do driver se existirem
         encoded_driver = encoded_driver.replace("%7B", "").replace("%7D", "")
         
@@ -225,7 +226,7 @@ async def validar_conexao(
         
         # Criar engine temporário
         connection_url = (
-            f"mssql+pyodbc://{usuario}:{senha}@"
+            f"mssql+pyodbc://{encoded_usuario}:{encoded_senha}@"
             f"{servidor_com_porta}/{banco}"
             f"?driver={encoded_driver}&TrustServerCertificate=yes"
         )
@@ -235,8 +236,6 @@ async def validar_conexao(
             connection_url,
             connect_args={
                 'timeout': 15,
-                'TrustServerCertificate': 'yes',
-                'ConnectTimeout': 15
             }
         )
         

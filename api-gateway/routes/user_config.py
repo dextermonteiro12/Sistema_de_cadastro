@@ -12,7 +12,7 @@ from routes.auth import verify_jwt_token
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/user-config", tags=["user-configuration"])
+router = APIRouter(prefix="/user-config", tags=["Configuração do Usuário"])
 
 
 # ===== MODELOS PYDANTIC =====
@@ -62,7 +62,7 @@ def get_user_from_header(authorization: str = Header(None)) -> Optional[str]:
 
 # ===== ENDPOINTS =====
 
-@router.post("/save")
+@router.post("/save", summary="Salvar configuração do usuário")
 async def save_user_config(
     request: SaveConfigRequest,
     authorization: str = Header(None)
@@ -133,7 +133,7 @@ async def save_user_config(
         )
 
 
-@router.get("/get", response_model=UserConfigResponse)
+@router.get("/get", response_model=UserConfigResponse, summary="Obter configuração completa do usuário")
 async def get_user_config(authorization: str = Header(None)):
     """
     Obtém configuração atual do usuário (credenciais descriptografadas).
@@ -166,7 +166,7 @@ async def get_user_config(authorization: str = Header(None)):
     )
 
 
-@router.get("/bases")
+@router.get("/bases", summary="Listar bases disponíveis do usuário")
 async def get_user_bases(authorization: str = Header(None)):
     """
     Lista as bases disponíveis para o usuário autenticado.
@@ -198,7 +198,7 @@ async def get_user_bases(authorization: str = Header(None)):
     }
 
 
-@router.get("/info")
+@router.get("/info", summary="Obter resumo da configuração do usuário")
 async def get_config_info(authorization: str = Header(None)):
     """
     Retorna informações da configuração do usuário (sem senhas).

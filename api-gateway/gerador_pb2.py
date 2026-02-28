@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rgerador.proto\x12\x07gerador\"\xb2\x01\n\x17GenerateClientesRequest\x12\x12\n\nconfig_key\x18\x01 \x01(\t\x12\x12\n\nquantidade\x18\x02 \x01(\x05\x12\x0e\n\x06qtd_pf\x18\x03 \x01(\x05\x12\x0e\n\x06qtd_pj\x18\x04 \x01(\x05\x12\x10\n\x08servidor\x18\n \x01(\t\x12\r\n\x05\x62\x61nco\x18\x0b \x01(\t\x12\x0f\n\x07usuario\x18\x0c \x01(\t\x12\r\n\x05senha\x18\r \x01(\t\x12\x0e\n\x06\x64river\x18\x0e \x01(\t\"]\n\x18GenerateClientesResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x10\n\x08inserted\x18\x04 \x01(\x05\"\"\n\x10JobStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"W\n\x11JobStatusResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07percent\x18\x02 \x01(\x05\x12\x10\n\x08inserted\x18\x03 \x01(\x05\x12\x0f\n\x07message\x18\x04 \x01(\t2\xaf\x01\n\rDataGenerator\x12W\n\x10GenerateClientes\x12 .gerador.GenerateClientesRequest\x1a!.gerador.GenerateClientesResponse\x12\x45\n\x0cGetJobStatus\x12\x19.gerador.JobStatusRequest\x1a\x1a.gerador.JobStatusResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rgerador.proto\x12\x07gerador\"\xdd\x01\n\x17GenerateClientesRequest\x12\x12\n\nconfig_key\x18\x01 \x01(\t\x12\x12\n\nquantidade\x18\x02 \x01(\x05\x12\x0e\n\x06qtd_pf\x18\x03 \x01(\x05\x12\x0e\n\x06qtd_pj\x18\x04 \x01(\x05\x12\x10\n\x08servidor\x18\n \x01(\t\x12\r\n\x05\x62\x61nco\x18\x0b \x01(\t\x12\x0f\n\x07usuario\x18\x0c \x01(\t\x12\r\n\x05senha\x18\r \x01(\t\x12\x0e\n\x06\x64river\x18\x0e \x01(\t\x12\x0e\n\x06versao\x18\x0f \x01(\t\x12\x19\n\x11\x63ustomizacao_json\x18\x10 \x01(\t\"]\n\x18GenerateClientesResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x10\n\x08inserted\x18\x04 \x01(\x05\"\"\n\x10JobStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"W\n\x11JobStatusResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07percent\x18\x02 \x01(\x05\x12\x10\n\x08inserted\x18\x03 \x01(\x05\x12\x0f\n\x07message\x18\x04 \x01(\t2\xaf\x01\n\rDataGenerator\x12W\n\x10GenerateClientes\x12 .gerador.GenerateClientesRequest\x1a!.gerador.GenerateClientesResponse\x12\x45\n\x0cGetJobStatus\x12\x19.gerador.JobStatusRequest\x1a\x1a.gerador.JobStatusResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,13 +32,13 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gerador_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_GENERATECLIENTESREQUEST']._serialized_start=27
-  _globals['_GENERATECLIENTESREQUEST']._serialized_end=205
-  _globals['_GENERATECLIENTESRESPONSE']._serialized_start=207
-  _globals['_GENERATECLIENTESRESPONSE']._serialized_end=300
-  _globals['_JOBSTATUSREQUEST']._serialized_start=302
-  _globals['_JOBSTATUSREQUEST']._serialized_end=336
-  _globals['_JOBSTATUSRESPONSE']._serialized_start=338
-  _globals['_JOBSTATUSRESPONSE']._serialized_end=425
-  _globals['_DATAGENERATOR']._serialized_start=428
-  _globals['_DATAGENERATOR']._serialized_end=603
+  _globals['_GENERATECLIENTESREQUEST']._serialized_end=248
+  _globals['_GENERATECLIENTESRESPONSE']._serialized_start=250
+  _globals['_GENERATECLIENTESRESPONSE']._serialized_end=343
+  _globals['_JOBSTATUSREQUEST']._serialized_start=345
+  _globals['_JOBSTATUSREQUEST']._serialized_end=379
+  _globals['_JOBSTATUSRESPONSE']._serialized_start=381
+  _globals['_JOBSTATUSRESPONSE']._serialized_end=468
+  _globals['_DATAGENERATOR']._serialized_start=471
+  _globals['_DATAGENERATOR']._serialized_end=646
 # @@protoc_insertion_point(module_scope)

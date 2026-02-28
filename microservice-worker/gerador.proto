@@ -18,6 +18,8 @@ message GenerateClientesRequest {
   string usuario = 12;
   string senha = 13;
   string driver = 14;
+  string versao = 15;
+  string customizacao_json = 16;
 }
 
 message GenerateClientesResponse {

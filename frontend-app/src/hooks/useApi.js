@@ -16,6 +16,12 @@ export function useApi() {
       return null;
     }
 
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setErro('Não autenticado. Faça login novamente.');
+      return null;
+    }
+
     setCarregando(true);
     setErro(null);
 
@@ -23,6 +29,7 @@ export function useApi() {
       const headers = {
         'Content-Type': 'application/json',
         'X-Config-Key': configKey,
+        'Authorization': `Bearer ${token}`,
         ...options.headers
       };
 

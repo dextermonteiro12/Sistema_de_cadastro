@@ -6,7 +6,11 @@ $killed = New-Object System.Collections.Generic.HashSet[int]
 Write-Host "Encerrando serviços do sistema..." -ForegroundColor Cyan
 
 foreach ($port in $ports) {
-    $connections = Get-NetTCPConnection -LocalPort $port -State Listen
+    $connections = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    if (-not $connections -or $connections.Count -eq 0) {
+        Write-Host "Porta $port sem processo em escuta." -ForegroundColor DarkGray
+        continue
+    }
     foreach ($conn in $connections) {
         $pid = [int]$conn.OwningProcess
         if ($pid -gt 0 -and -not $killed.Contains($pid)) {

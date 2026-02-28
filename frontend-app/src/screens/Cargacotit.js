@@ -12,9 +12,13 @@ export default function CargaCoTit() {
   };
 
   const executarCarga = async () => {
+    const token = localStorage.getItem('auth_token');
+    const configKey = sessionStorage.getItem('config_key');
     const conf = apiService.carregarSqlConfig();
     const baseAtiva = apiService.carregarBaseAtiva();
     if (!conf || !baseAtiva?.banco) return alert("⚠️ Configure o ambiente SQL e selecione a base primeiro!");
+    if (!token) return alert('Sessão expirada. Faça login novamente.');
+    if (!configKey) return alert('Configuração inativa. Ative a base antes de executar.');
 
     const configFinal = {
       ...conf,
@@ -30,17 +34,23 @@ export default function CargaCoTit() {
     try {
       const res = await fetch(`${API_BASE_URL}/executar_carga_cotit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: configFinal })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Config-Key': configKey
+        },
+        body: JSON.stringify({
+          config_key: configKey,
+          versao: configFinal?.versao || null
+        })
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        adicionarLog(`✅ Sucesso: ${data.mensagem}`);
-        adicionarLog(`📊 Registros processados: ${data.total_processado}`);
+        adicionarLog(`✅ Sucesso: ${data.message || data.mensagem || 'Carga iniciada'}`);
       } else {
-        adicionarLog(`❌ Erro: ${data.erro}`);
+        adicionarLog(`❌ Erro: ${data.erro || data.message || 'Falha ao processar carga'}`);
       }
     } catch (err) {
       adicionarLog("❌ Falha crítica na comunicação com a API.");
@@ -51,7 +61,6 @@ export default function CargaCoTit() {
 
   return (
     <div style={{ padding: '30px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #ddd' }}>
-      <h3>🚀 Carga de Dados: Co-Titularidade (CO_TIT)</h3>
       <p style={{ color: '#666', fontSize: '14px' }}>
         Este processo lê a <b>TB_CLIENTE</b> e gera 3 registros na <b>TAB_CLIENTES_CO_TIT_PLD</b>:
         <br />- 1 Registro baseado no titular real.

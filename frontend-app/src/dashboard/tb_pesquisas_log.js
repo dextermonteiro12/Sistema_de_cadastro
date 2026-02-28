@@ -8,11 +8,17 @@ export default function TbPesquisasLog() {
 
   const fetchData = useCallback(async () => {
     const configKey = sessionStorage.getItem('config_key');
+    const token = localStorage.getItem('auth_token');
     if (!configKey) return;
+    if (!token) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/dashboard/log-pesquisas`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Config-Key': configKey },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Config-Key': configKey,
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ config_key: configKey })
       });
       const result = await res.json();

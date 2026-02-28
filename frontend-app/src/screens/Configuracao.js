@@ -211,10 +211,6 @@ export default function Configuracao() {
 
   return (
     <div style={containerStyle}>
-      <h2>⚙️ Configuração de Banco de Dados</h2>
-
-
-
       {/* Form */}
       <form onSubmit={handleValidar} style={formStyle}>
         <div style={fieldGroupStyle}>

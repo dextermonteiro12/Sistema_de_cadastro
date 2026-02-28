@@ -98,7 +98,9 @@ class ApiService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/config/status/${this.configKey}`);
+      const response = await fetch(`${API_BASE_URL}/config/status/${this.configKey}`, {
+        headers: this.obterHeaders()
+      });
       const data = await response.json();
       return data;
     } catch (error) {
@@ -111,7 +113,9 @@ class ApiService {
    */
   async listarConfiguracoes() {
     try {
-      const response = await fetch(`${API_BASE_URL}/config/listar`);
+      const response = await fetch(`${API_BASE_URL}/config/listar`, {
+        headers: this.obterHeaders()
+      });
       const data = await response.json();
       return data;
     } catch (error) {
@@ -168,7 +172,8 @@ class ApiService {
   async fecharConfiguracao(configKey) {
     try {
       const response = await fetch(`${API_BASE_URL}/config/fechar/${configKey}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: this.obterHeaders()
       });
       const data = await response.json();
       return data;
@@ -204,9 +209,16 @@ class ApiService {
    */
   obterHeaders() {
     const headers = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('auth_token');
+
     if (this.configKey) {
       headers['X-Config-Key'] = this.configKey;
     }
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     return headers;
   }
 

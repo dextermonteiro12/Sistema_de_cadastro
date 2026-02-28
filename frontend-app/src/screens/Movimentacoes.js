@@ -18,9 +18,13 @@ export default function Movimentacoes() {
 
   // AJUSTE: Agora recebe 'qtd' que vem do GeneratorForm
   const handleGerarCarga = async (qtd) => {
+    const token = localStorage.getItem('auth_token');
+    const configKey = sessionStorage.getItem('config_key');
     const configSql = apiService.carregarSqlConfig();
     const baseAtiva = apiService.carregarBaseAtiva();
     if (!configSql || !baseAtiva?.banco) return alert("⚠️ Configure o Ambiente SQL e selecione a base primeiro!");
+    if (!token) return alert('Sessão expirada. Faça login novamente.');
+    if (!configKey) return alert('Configuração inativa. Ative a base antes de executar.');
 
     const payloadConfig = {
       ...configSql,
@@ -32,9 +36,14 @@ export default function Movimentacoes() {
     try {
       const res = await fetch(`${API_BASE_URL}/gerar_movimentacoes`, {
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Config-Key': configKey
+        },
         body: JSON.stringify({ 
-          config: payloadConfig,
+          config_key: configKey,
+          versao: payloadConfig?.versao || null,
           tipo: tipoAtivo,
           quantidade: qtd,          // <--- ENVIANDO A QUANTIDADE PARA O BACKEND
           data_referencia: dataReferencia,
@@ -65,7 +74,6 @@ export default function Movimentacoes() {
       </div>
 
       <div style={{ flex: 1, padding: '30px' }}>
-        <h3>Módulo de Movimentação Financeira</h3>
         <p style={{color: '#666', marginBottom: '25px'}}>Cenário ativo: <b>{tipoAtivo.replace('MOVFIN_', '').replace('MOVFIN', 'NACIONAL')}</b></p>
         
         <div style={{ backgroundColor: '#fcfcfc', padding: '25px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '20px' }}>

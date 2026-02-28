@@ -15,7 +15,7 @@ from routes.auth import verify_jwt_token, AuthDB
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/config", tags=["configuration"])
+router = APIRouter(prefix="/config", tags=["Configuração"])
 
 # ===== MODELOS PYDANTIC =====
 
@@ -221,7 +221,7 @@ def _extract_bases_from_xml(xml_path: Path) -> list[dict]:
 
 # ===== ENDPOINTS =====
 
-@router.post("/validar")
+@router.post("/validar", summary="Validar e ativar configuração SQL")
 async def validar_configuracao(request: ValidarConfigRequest):
     """
     Valida configuração de banco de dados do frontend
@@ -281,7 +281,7 @@ async def validar_configuracao(request: ValidarConfigRequest):
         "detalhes": result["detalhes"]
     }
 
-@router.post("/teste")
+@router.post("/teste", summary="Testar conexão SQL sem ativar")
 async def testar_conexao(request: ValidarConfigRequest):
     """
     Apenas testa a conexão sem criar engine
@@ -301,7 +301,7 @@ async def testar_conexao(request: ValidarConfigRequest):
     
     return JSONResponse(content=result, status_code=status_code)
 
-@router.post("/listar-bases-pasta")
+@router.post("/listar-bases-pasta", summary="Listar bases do Advice.xml")
 async def listar_bases_pasta(request: ListarBasesPastaRequest):
     """
     Lista nomes de bases candidatas a partir do Advice.xml.
@@ -335,7 +335,7 @@ async def listar_bases_pasta(request: ListarBasesPastaRequest):
         logger.error(f"Erro inesperado ao listar bases: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro inesperado: {str(e)}")
 
-@router.get("/status/{config_key}")
+@router.get("/status/{config_key}", summary="Consultar status de configuração ativa")
 async def status_configuracao(request: Request, config_key: str):
     """
     Obtém status de uma configuração ativa.
@@ -369,7 +369,7 @@ async def status_configuracao(request: Request, config_key: str):
         }
     }
 
-@router.get("/listar")
+@router.get("/listar", summary="Listar configurações do usuário")
 async def listar_configuracoes(request: Request):
     """
     Lista todas as configurações do usuário autenticado.
@@ -412,7 +412,7 @@ async def listar_configuracoes(request: Request):
         logger.error(f"Erro ao listar configurações: {e}")
         raise HTTPException(status_code=500, detail="Erro ao listar configurações")
 
-@router.post("/fechar/{config_key}")
+@router.post("/fechar/{config_key}", summary="Fechar configuração ativa")
 async def fechar_configuracao(request: Request, config_key: str):
     """
     Fecha uma configuração específica.

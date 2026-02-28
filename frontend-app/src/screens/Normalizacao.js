@@ -15,13 +15,19 @@ export default function Normalizacao() {
 
   const verificarStatus = async () => {
     const key = sessionStorage.getItem('config_key');
+    const token = localStorage.getItem('auth_token');
     if (!key) return alert('Ative a configuracao primeiro.');
+    if (!token) return alert('Faça login novamente para continuar.');
 
     setProcLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/check_ambiente`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Config-Key': key },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Config-Key': key,
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ config_key: key })
       });
       const data = await res.json();
@@ -40,14 +46,20 @@ export default function Normalizacao() {
 
   const executarNormalizacao = async () => {
     const key = sessionStorage.getItem('config_key');
+    const token = localStorage.getItem('auth_token');
     if (!key) return alert('Ative a configuracao antes.');
+    if (!token) return alert('Faça login novamente para continuar.');
     if (!window.confirm(`Criar estrutura para layout ${versaoAtual || 'detectado'}?`)) return;
 
     setProcLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/setup_ambiente`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Config-Key': key },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Config-Key': key,
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ config_key: key, versao: versaoAtual || null })
       });
       const data = await res.json();
@@ -66,7 +78,6 @@ export default function Normalizacao() {
 
   return (
     <div style={{ padding: '30px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #ddd' }}>
-      <h3>Normalizacao do Ambiente SQL Server</h3>
       <p>Config key: <b>{configKey || 'NAO ATIVA'}</b></p>
       {versaoAtual && <p>Layout detectado: <b>{versaoAtual}</b></p>}
 

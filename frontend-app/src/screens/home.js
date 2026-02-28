@@ -9,7 +9,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const Home = () => {
-  const { configKey, ambiente } = useConfig();
+  const { configKey } = useConfig();
   const [basesDisponiveis, setBasesDisponiveis] = useState([]);
   const [baseSelecionada, setBaseSelecionada] = useState('');
   const [loading, setLoading] = useState(true);
@@ -72,6 +72,7 @@ const Home = () => {
     // 🔑 Buscar a base completa para obter config_key
     const baseCompleta = basesDisponiveis.find(b => b.id === baseId);
     const configKey = baseCompleta?.config_key || sessionStorage.getItem('config_key');
+    const token = localStorage.getItem('auth_token');
     
     console.log('🔍 Buscando indicadores para:', { baseId, configKey });
     
@@ -79,9 +80,14 @@ const Home = () => {
       throw new Error('Config key não encontrada. Refaça a configuração.');
     }
     
+    if (!token) {
+      throw new Error('Token de autenticação não encontrado. Faça login novamente.');
+    }
+    
     const headers = {
       'Content-Type': 'application/json',
-      'X-Config-Key': configKey
+      'X-Config-Key': configKey,
+      'Authorization': `Bearer ${token}`
     };
 
     const [saudeRes, pendentesRes] = await Promise.all([
@@ -208,7 +214,6 @@ const Home = () => {
   if (erro && basesDisponiveis.length === 0) {
     return (
       <div style={{ padding: '20px' }}>
-        <h2 style={{ color: '#1a1f36' }}>Dashboard de Saúde das Bases</h2>
         <div style={{ 
           ...msgStyle, 
           color: '#dc3545',
@@ -227,7 +232,6 @@ const Home = () => {
   if (basesDisponiveis.length === 0) {
     return (
       <div style={{ padding: '20px' }}>
-        <h2 style={{ color: '#1a1f36' }}>Dashboard de Saúde das Bases</h2>
         <div style={{ 
           ...msgStyle, 
           color: '#17a2b8',
@@ -245,13 +249,6 @@ const Home = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      <h2 style={{ marginBottom: '8px', color: '#1a1f36' }}>Dashboard de Saúde das Bases</h2>
-      <p style={{ marginTop: 0, color: '#5b6783', marginBottom: '20px' }}>
-        Selecione uma base para visualizar os indicadores em tempo real.
-      </p>
-      <div style={sessionInfoStyle}>
-        Ambiente ativo: <strong>{ambiente || baseSelecionada || '-'}</strong> | Sessão: <strong>{sessionStorage.getItem('pld_session_id') || '-'}</strong>
-      </div>
 
       <div style={selectorContainerStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -400,5 +397,4 @@ const comboListStyle = { maxHeight: '180px', overflowY: 'auto', padding: '6px 8p
 const comboEmptyStyle = { fontSize: '12px', color: '#7b879d', padding: '8px 6px' };
 const baseOptionButtonStyle = { width: '100%', textAlign: 'left', border: 'none', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', marginBottom: '4px' };
 const basePanelStyle = { marginBottom: '28px', background: '#f8fbff', border: '1px solid #dde7f3', borderRadius: '12px', padding: '16px' };
-const sessionInfoStyle = { marginTop: '-8px', marginBottom: '14px', fontSize: '12px', color: '#4b5563' };
 export default Home;
